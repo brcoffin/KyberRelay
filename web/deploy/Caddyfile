@@ -1,0 +1,15 @@
+# Kyber-Zip web service — Caddy v2 reverse proxy with automatic HTTPS.
+#
+# Replace send.example.com with your domain (A record -> droplet IP). Caddy
+# provisions/renews the TLS cert automatically. Set WEB_BASE_URL in the env
+# file to this same https URL so share links are correct.
+#
+# Caddy v2 streams bodies with no upload size limit by default; the service
+# itself caps uploads via WEB_MAX_BYTES.
+#
+# This can live alongside the relay on the same droplet — just add both site
+# blocks to /etc/caddy/Caddyfile (one for relay.example.com, one here).
+
+send.example.com {
+	reverse_proxy 127.0.0.1:8090
+}

@@ -1,0 +1,40 @@
+[Unit]
+Description=Kyber-Zip hosted file-transfer web service
+Documentation=https://github.com/brcoffin/KyberRelay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kyber-web
+Group=kyber-web
+ExecStart=/usr/local/bin/kyber-web
+
+# Defaults — override in /etc/kyber-web/kyber-web.env.
+# Listen on localhost only; Caddy terminates TLS and reverse-proxies to this.
+# WEB_BASE_URL MUST be the public https URL (used to build share links).
+Environment=WEB_ADDR=127.0.0.1:8090
+Environment=WEB_DATA_DIR=/var/lib/kyber-web/data
+Environment=WEB_BASE_URL=https://send.example.com
+Environment=WEB_MAX_BYTES=104857600
+Environment=WEB_TTL=24h
+EnvironmentFile=-/etc/kyber-web/kyber-web.env
+
+Restart=on-failure
+RestartSec=3
+
+# Hardening — only needs to write its data dir and talk TCP.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=true
+ReadWritePaths=/var/lib/kyber-web
+
+[Install]
+WantedBy=multi-user.target

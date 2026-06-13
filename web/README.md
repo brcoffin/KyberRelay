@@ -48,14 +48,9 @@ Open http://localhost:8090.
 
 ## Deploy
 
-Same pattern as the relay (`relay/deploy/`): run behind **Caddy** with automatic
-HTTPS and a systemd unit. Point `WEB_BASE_URL` at the public domain and proxy it:
-
-```
-send.example.com {
-	reverse_proxy 127.0.0.1:8090
-}
-```
+See [`deploy/`](deploy/) for a full DigitalOcean/Ubuntu setup — cross-compile
+script, hardened systemd unit, Caddy config (automatic HTTPS), installer, and a
+step-by-step guide (including running it alongside the relay on one droplet).
 
 ## Roadmap
 
