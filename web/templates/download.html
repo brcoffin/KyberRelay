@@ -3,49 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kyber-Zip — Receive a file</title>
-<style>
-  :root { color-scheme: dark; }
-  body { font: 16px/1.5 system-ui, "Segoe UI", sans-serif; background:#181a1f; color:#ecedf2;
-         margin:0; display:flex; min-height:100vh; align-items:center; justify-content:center; }
-  .card { background:#23272e; border:1px solid #3a3e48; border-radius:12px; padding:28px;
-          width:min(440px, 92vw); box-shadow:0 10px 40px rgba(0,0,0,.4); }
-  h1 { margin:0 0 4px; font-size:22px; }
-  p.sub { margin:0 0 20px; color:#9aa0ac; font-size:14px; }
-  label { display:block; margin:14px 0 6px; font-size:13px; color:#cfd2da; }
-  input[type=password] { width:100%; box-sizing:border-box; background:#2c313a;
-    border:1px solid #3a3e48; color:#ecedf2; border-radius:8px; padding:10px; font-size:15px; }
-  button { margin-top:20px; width:100%; background:#5a9cf8; color:#0b1322; border:0;
-           border-radius:8px; padding:12px; font-size:16px; font-weight:600; cursor:pointer; }
-  .err { margin-top:14px; color:#ef7676; font-size:14px; min-height:18px; }
-</style>
+<title>KyberCrypt — Receive a file</title>
+<link rel="icon" type="image/svg+xml" href="/static/kybercrypt-icon.svg">
+<link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <div class="card">
-    <h1>Receive a file</h1>
-    <p class="sub">Enter the passphrase the sender shared with you.</p>
-
-    <form id="f" method="post" action="/api/download/{{.ID}}">
-      <label for="passphrase">Passphrase</label>
-      <input type="password" id="passphrase" name="passphrase" required autofocus>
-      <button type="submit">Decrypt &amp; download</button>
-    </form>
-    <div class="err" id="err"></div>
+  <div class="wrap">
+    <a href="/"><img class="brand-logo" src="/static/kybercrypt-horizontal.svg" alt="KyberCrypt"></a>
+    <div class="card">
+      <h1>Receive a file</h1>
+      <p class="sub">Enter the passphrase the sender shared with you.</p>
+      <form id="f" method="post" action="/api/download/{{.ID}}">
+        <label for="passphrase">Passphrase</label>
+        <input type="password" id="passphrase" name="passphrase" required autofocus>
+        <button type="submit">Decrypt &amp; download</button>
+      </form>
+      <div class="err" id="err"></div>
+    </div>
   </div>
-
 <script>
-// Submit via fetch so a wrong passphrase shows an inline error instead of
-// navigating to an error page; on success, trigger the file download.
-const f = document.getElementById('f');
-const err = document.getElementById('err');
-f.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  err.textContent = '';
-  const res = await fetch(f.action, { method:'POST', body:new FormData(f) });
-  if (!res.ok) {
-    err.textContent = res.status === 401 ? 'Wrong passphrase.' :
-                      res.status === 404 ? 'This file is gone or expired.' :
-                      ('Error: ' + res.status);
+const f=document.getElementById('f'), err=document.getElementById('err');
+f.addEventListener('submit', async e => {
+  e.preventDefault(); err.textContent='';
+  const res = await fetch(f.action, {method:'POST', body:new FormData(f)});
+  if(!res.ok){
+    err.textContent = res.status===401 ? 'Wrong passphrase.' :
+                      res.status===404 ? 'This file is gone or expired.' : ('Error: '+res.status);
     return;
   }
   const blob = await res.blob();
@@ -53,9 +36,8 @@ f.addEventListener('submit', async (e) => {
   const m = /filename="?([^"]+)"?/.exec(cd);
   const name = m ? m[1] : 'download.bin';
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = name; document.body.appendChild(a); a.click();
-  a.remove(); URL.revokeObjectURL(url);
+  const a = document.createElement('a'); a.href=url; a.download=name;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 });
 </script>
 </body>

@@ -1,0 +1,128 @@
+/* KyberCrypt brand theme — navy + #1478FF, matching the logo. */
+:root {
+  --bg:#0a1430;
+  --card:#122348;
+  --card-2:#0e1c3e;
+  --border:#243a66;
+  --accent:#1478ff;       /* brand blue (wordmark "Crypt", data streaks) */
+  --accent-hi:#3a92ff;
+  --accent-light:#42a0ff; /* light-blue accent */
+  --navy:#08285f;         /* brand dark (wordmark "Kyber") */
+  --text:#eaf0fb;
+  --dim:#8aa0c4;          /* slate, like the tagline */
+  --ok:#46c98a;
+  --err:#ff6b6b;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font: 16px/1.5 system-ui, "Segoe UI", Roboto, sans-serif;
+  margin: 0;
+  color: var(--text);
+  background:
+    radial-gradient(1100px 520px at 50% -8%, #16306a 0%, rgba(22,48,106,0) 60%),
+    var(--bg);
+  min-height: 100vh;
+}
+
+a { color: var(--accent-light); }
+
+/* Centered single-card pages (index, register, login, download, gone) */
+.wrap {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 28px 16px;
+}
+.brand-logo { height: 52px; width: auto; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  width: min(440px, 94vw);
+  box-shadow: 0 16px 50px rgba(0,0,0,.45);
+}
+
+h1 { margin: 0 0 4px; font-size: 22px; }
+h2 { margin: 0 0 14px; font-size: 18px; }
+p.sub { margin: 0 0 18px; color: var(--dim); font-size: 14px; }
+
+label { display: block; margin: 14px 0 6px; font-size: 13px; color: #c7d3ea; }
+
+input[type=file], input[type=password], input[type=number], input[type=text], input:not([type]) {
+  width: 100%;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 9px;
+  padding: 11px;
+  font-size: 15px;
+}
+input:focus { outline: none; border-color: var(--accent); }
+
+button, button.primary {
+  margin-top: 20px;
+  width: 100%;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 9px;
+  padding: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:hover { background: var(--accent-hi); }
+button:disabled { opacity: .6; cursor: default; }
+
+.opt { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 14px; color: #c7d3ea; }
+.opt input { width: auto; }
+
+.err { margin-top: 14px; color: var(--err); font-size: 14px; min-height: 18px; }
+.status { margin-top: 12px; font-size: 14px; min-height: 18px; }
+.alt { margin-top: 16px; font-size: 14px; color: var(--dim); }
+
+.result {
+  margin-top: 18px; padding: 14px;
+  background: rgba(20,120,255,.10);
+  border: 1px solid var(--accent);
+  border-radius: 9px; display: none;
+}
+.result.show { display: block; }
+.result a { color: var(--accent-light); word-break: break-all; }
+
+/* App dashboard */
+header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 22px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+header .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+header .hdr-icon { height: 30px; width: 30px; }
+header .wordmark { font-weight: 700; letter-spacing: -.5px; }
+header .wordmark .c { color: var(--accent); }
+header .who { color: var(--dim); font-size: 14px; margin-left: 6px; }
+.logout {
+  width: auto; margin: 0; background: transparent; border: 1px solid var(--border);
+  color: #c7d3ea; border-radius: 8px; padding: 7px 13px; font-size: 14px; font-weight: 500;
+}
+.logout:hover { background: rgba(255,255,255,.05); }
+
+main { max-width: 760px; margin: 26px auto; padding: 0 16px; }
+main .card { width: auto; margin-bottom: 22px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--card-2); }
+th { color: var(--dim); font-weight: 600; }
+a.dl { color: var(--ok); font-weight: 600; }
+.del { width: auto; margin: 0; background: none; border: 0; color: var(--err); cursor: pointer; font-size: 13px; }
+.del:hover { background: none; text-decoration: underline; }
+.empty { color: var(--dim); }

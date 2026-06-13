@@ -3,44 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kyber-Zip — Create account</title>
-<style>
-  :root { color-scheme: dark; }
-  body { font: 16px/1.5 system-ui, "Segoe UI", sans-serif; background:#181a1f; color:#ecedf2;
-         margin:0; display:flex; min-height:100vh; align-items:center; justify-content:center; }
-  .card { background:#23272e; border:1px solid #3a3e48; border-radius:12px; padding:28px;
-          width:min(400px,92vw); }
-  h1 { margin:0 0 4px; font-size:22px; }
-  p.sub { margin:0 0 18px; color:#9aa0ac; font-size:14px; }
-  label { display:block; margin:14px 0 6px; font-size:13px; color:#cfd2da; }
-  input { width:100%; box-sizing:border-box; background:#2c313a; border:1px solid #3a3e48;
-          color:#ecedf2; border-radius:8px; padding:10px; font-size:15px; }
-  button { margin-top:20px; width:100%; background:#5a9cf8; color:#0b1322; border:0;
-           border-radius:8px; padding:12px; font-size:16px; font-weight:600; cursor:pointer; }
-  .err { margin-top:14px; color:#ef7676; font-size:14px; min-height:18px; }
-  .alt { margin-top:16px; font-size:14px; color:#9aa0ac; } .alt a { color:#5a9cf8; }
-</style>
+<title>KyberCrypt — Create account</title>
+<link rel="icon" type="image/svg+xml" href="/static/kybercrypt-icon.svg">
+<link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <div class="card">
-    <h1>Create account</h1>
-    <p class="sub">Generates your post-quantum (ML-KEM) keypair. Your private key is encrypted with your password — if you lose the password, your files are unrecoverable.</p>
-    <form id="f">
-      <label for="username">Username</label>
-      <input id="username" name="username" autocomplete="username" placeholder="3-32 chars: a-z 0-9 _ -" required>
-      <label for="password">Password</label>
-      <input id="password" name="password" type="password" autocomplete="new-password" placeholder="at least 8 characters" required>
-      <button type="submit">Create account</button>
-    </form>
-    <div class="err" id="err"></div>
-    <div class="alt">Already have one? <a href="/login">Log in</a></div>
+  <div class="wrap">
+    <a href="/"><img class="brand-logo" src="/static/kybercrypt-horizontal.svg" alt="KyberCrypt"></a>
+    <div class="card">
+      <h1>Create account</h1>
+      <p class="sub">Generates your post-quantum (ML-KEM) keypair. Your private key is encrypted with your password — if you lose the password, your files are unrecoverable.</p>
+      <form id="f">
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" placeholder="3-32 chars: a-z 0-9 _ -" required>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" placeholder="at least 8 characters" required>
+        <button type="submit">Create account</button>
+      </form>
+      <div class="err" id="err"></div>
+      <div class="alt">Already have one? <a href="/login">Log in</a></div>
+    </div>
   </div>
 <script>
 const f=document.getElementById('f'), err=document.getElementById('err');
 f.addEventListener('submit', async e => {
   e.preventDefault(); err.textContent='';
   const res = await fetch('/api/register', {method:'POST', body:new FormData(f)});
-  if (res.ok) { location.href='/app'; } else { err.textContent = await res.text(); }
+  if(res.ok){ location.href='/app'; } else { err.textContent = await res.text(); }
 });
 </script>
 </body>

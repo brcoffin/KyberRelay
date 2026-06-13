@@ -14,6 +14,7 @@ package main
 import (
 	"embed"
 	"html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -25,6 +26,9 @@ import (
 
 //go:embed templates/*.html
 var templatesFS embed.FS
+
+//go:embed static
+var staticFS embed.FS
 
 type config struct {
 	addr       string
@@ -104,6 +108,11 @@ func main() {
 	mux.HandleFunc("GET /d/{id}", s.handleDownloadPage)
 	mux.HandleFunc("POST /api/download/{id}", s.handleDownload)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
+
+	// Static assets (logos, stylesheet) served from the embedded FS.
+	if sub, err := fs.Sub(staticFS, "static"); err == nil {
+		mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(sub)))
+	}
 
 	// Accounts (send-by-username)
 	mux.HandleFunc("GET /register", s.handleRegisterPage)

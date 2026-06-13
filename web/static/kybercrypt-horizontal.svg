@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+  <title id="title">KyberCrypt horizontal logo</title>
+  <desc id="desc">KyberCrypt secure file transfer logo with Kyber cube, document, keyhole, and wordmark.</desc>
+  <defs>
+    <linearGradient id="blueFace" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1C7BFF"/>
+      <stop offset="1" stop-color="#0057D8"/>
+    </linearGradient>
+    <linearGradient id="navyFace" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#083B86"/>
+      <stop offset="1" stop-color="#031D4D"/>
+    </linearGradient>
+    <linearGradient id="topFace" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B2D67"/>
+      <stop offset="1" stop-color="#1683FF"/>
+    </linearGradient>
+    <style>
+      .brand-dark{fill:#08285F;}
+      .brand-blue{fill:#1478FF;}
+      .tag{fill:#7D8FA6;font-family:Arial, Helvetica, sans-serif;font-size:31px;font-weight:600;letter-spacing:11px;}
+      .word{font-family:Arial, Helvetica, sans-serif;font-size:106px;font-weight:700;letter-spacing:-5px;}
+      .data{fill:#1478FF;}
+      .data-light{fill:#42A0FF;}
+      .line{fill:#08285F;}
+    </style>
+  </defs>
+
+  <!-- Data transfer streaks -->
+  <rect class="data" x="58" y="117" width="118" height="12" rx="1"/>
+  <rect class="data-light" x="38" y="117" width="13" height="12" rx="1"/>
+  <rect class="data" x="73" y="154" width="104" height="12" rx="1"/>
+  <rect class="data-light" x="45" y="154" width="13" height="12" rx="1"/>
+  <rect class="data" x="89" y="191" width="88" height="12" rx="1"/>
+  <rect class="data-light" x="58" y="191" width="13" height="12" rx="1"/>
+
+  <!-- Kyber cube icon -->
+  <g transform="translate(160 50)">
+    <!-- left/front face -->
+    <polygon points="0,55 110,110 110,235 0,180" fill="url(#navyFace)"/>
+    <!-- right face -->
+    <polygon points="110,110 220,55 220,180 110,235" fill="url(#blueFace)"/>
+    <!-- top face -->
+    <polygon points="0,55 110,0 220,55 110,110" fill="url(#topFace)"/>
+    <!-- white cube inner edge -->
+    <polyline points="0,55 110,110 220,55" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linejoin="round"/>
+    <line x1="110" y1="110" x2="110" y2="235" stroke="#FFFFFF" stroke-width="14"/>
+
+    <!-- document -->
+    <path d="M58 73 H133 L164 104 V166 C164 177 155 186 144 186 H58 C47 186 38 177 38 166 V93 C38 82 47 73 58 73 Z" fill="#FFFFFF"/>
+    <path d="M133 73 V108 H164 Z" fill="#1478FF"/>
+    <rect class="line" x="70" y="118" width="62" height="8" rx="1"/>
+    <rect class="line" x="70" y="139" width="76" height="8" rx="1"/>
+    <rect class="line" x="70" y="160" width="58" height="8" rx="1"/>
+
+    <!-- keyhole -->
+    <circle cx="110" cy="202" r="13" fill="#FFFFFF"/>
+    <path d="M102 211 H118 L124 236 H96 Z" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="448" y="152" class="word brand-dark">Kyber</text>
+  <text x="741" y="152" class="word brand-blue">Crypt</text>
+  <text x="452" y="218" class="tag">SECURE FILE TRANSFER</text>
+</svg>

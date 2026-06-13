@@ -3,42 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kyber-Zip — Log in</title>
-<style>
-  :root { color-scheme: dark; }
-  body { font: 16px/1.5 system-ui, "Segoe UI", sans-serif; background:#181a1f; color:#ecedf2;
-         margin:0; display:flex; min-height:100vh; align-items:center; justify-content:center; }
-  .card { background:#23272e; border:1px solid #3a3e48; border-radius:12px; padding:28px;
-          width:min(400px,92vw); }
-  h1 { margin:0 0 18px; font-size:22px; }
-  label { display:block; margin:14px 0 6px; font-size:13px; color:#cfd2da; }
-  input { width:100%; box-sizing:border-box; background:#2c313a; border:1px solid #3a3e48;
-          color:#ecedf2; border-radius:8px; padding:10px; font-size:15px; }
-  button { margin-top:20px; width:100%; background:#5a9cf8; color:#0b1322; border:0;
-           border-radius:8px; padding:12px; font-size:16px; font-weight:600; cursor:pointer; }
-  .err { margin-top:14px; color:#ef7676; font-size:14px; min-height:18px; }
-  .alt { margin-top:16px; font-size:14px; color:#9aa0ac; } .alt a { color:#5a9cf8; }
-</style>
+<title>KyberCrypt — Log in</title>
+<link rel="icon" type="image/svg+xml" href="/static/kybercrypt-icon.svg">
+<link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <div class="card">
-    <h1>Log in</h1>
-    <form id="f">
-      <label for="username">Username</label>
-      <input id="username" name="username" autocomplete="username" required>
-      <label for="password">Password</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required>
-      <button type="submit">Log in</button>
-    </form>
-    <div class="err" id="err"></div>
-    <div class="alt">No account? <a href="/register">Create one</a></div>
+  <div class="wrap">
+    <a href="/"><img class="brand-logo" src="/static/kybercrypt-horizontal.svg" alt="KyberCrypt"></a>
+    <div class="card">
+      <h1>Log in</h1>
+      <form id="f">
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" required>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit">Log in</button>
+      </form>
+      <div class="err" id="err"></div>
+      <div class="alt">No account? <a href="/register">Create one</a></div>
+    </div>
   </div>
 <script>
 const f=document.getElementById('f'), err=document.getElementById('err');
 f.addEventListener('submit', async e => {
   e.preventDefault(); err.textContent='';
   const res = await fetch('/api/login', {method:'POST', body:new FormData(f)});
-  if (res.ok) { location.href='/app'; } else { err.textContent = await res.text(); }
+  if(res.ok){ location.href='/app'; } else { err.textContent = await res.text(); }
 });
 </script>
 </body>

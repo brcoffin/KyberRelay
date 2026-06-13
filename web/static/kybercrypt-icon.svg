@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">KyberCrypt icon</title>
+  <desc id="desc">Standalone KyberCrypt secure file transfer cube icon with document and keyhole.</desc>
+  <defs>
+    <linearGradient id="blueFace" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1C7BFF"/>
+      <stop offset="1" stop-color="#0057D8"/>
+    </linearGradient>
+    <linearGradient id="navyFace" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#083B86"/>
+      <stop offset="1" stop-color="#031D4D"/>
+    </linearGradient>
+    <linearGradient id="topFace" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B2D67"/>
+      <stop offset="1" stop-color="#1683FF"/>
+    </linearGradient>
+    <style>
+      .data{fill:#1478FF;}
+      .data-light{fill:#42A0FF;}
+      .line{fill:#08285F;}
+    </style>
+  </defs>
+
+  <!-- Data transfer streaks -->
+  <rect class="data" x="32" y="190" width="120" height="18" rx="2"/>
+  <rect class="data-light" x="8" y="190" width="17" height="18" rx="2"/>
+  <rect class="data" x="50" y="242" width="102" height="18" rx="2"/>
+  <rect class="data-light" x="18" y="242" width="17" height="18" rx="2"/>
+  <rect class="data" x="70" y="294" width="82" height="18" rx="2"/>
+  <rect class="data-light" x="36" y="294" width="17" height="18" rx="2"/>
+
+  <!-- Cube mark -->
+  <g transform="translate(146 82) scale(1.2)">
+    <polygon points="0,70 125,132 125,282 0,220" fill="url(#navyFace)"/>
+    <polygon points="125,132 250,70 250,220 125,282" fill="url(#blueFace)"/>
+    <polygon points="0,70 125,8 250,70 125,132" fill="url(#topFace)"/>
+    <polyline points="0,70 125,132 250,70" fill="none" stroke="#FFFFFF" stroke-width="16" stroke-linejoin="round"/>
+    <line x1="125" y1="132" x2="125" y2="282" stroke="#FFFFFF" stroke-width="16"/>
+
+    <!-- Document -->
+    <path d="M61 92 H146 L180 126 V196 C180 209 170 219 157 219 H61 C48 219 38 209 38 196 V115 C38 102 48 92 61 92 Z" fill="#FFFFFF"/>
+    <path d="M146 92 V130 H180 Z" fill="#1478FF"/>
+    <rect class="line" x="76" y="143" width="70" height="9" rx="1"/>
+    <rect class="line" x="76" y="168" width="86" height="9" rx="1"/>
+    <rect class="line" x="76" y="193" width="66" height="9" rx="1"/>
+
+    <!-- Keyhole -->
+    <circle cx="125" cy="242" r="15" fill="#FFFFFF"/>
+    <path d="M116 253 H134 L141 284 H109 Z" fill="#FFFFFF"/>
+  </g>
+</svg>

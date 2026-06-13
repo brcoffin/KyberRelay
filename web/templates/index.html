@@ -3,97 +3,57 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kyber-Zip — Send a file</title>
-<style>
-  :root { color-scheme: dark; }
-  body { font: 16px/1.5 system-ui, "Segoe UI", sans-serif; background:#181a1f; color:#ecedf2;
-         margin:0; display:flex; min-height:100vh; align-items:center; justify-content:center; }
-  .card { background:#23272e; border:1px solid #3a3e48; border-radius:12px; padding:28px;
-          width:min(440px, 92vw); box-shadow:0 10px 40px rgba(0,0,0,.4); }
-  h1 { margin:0 0 4px; font-size:22px; }
-  p.sub { margin:0 0 20px; color:#9aa0ac; font-size:14px; }
-  label { display:block; margin:14px 0 6px; font-size:13px; color:#cfd2da; }
-  input[type=file], input[type=password], input[type=number] {
-    width:100%; box-sizing:border-box; background:#2c313a; border:1px solid #3a3e48;
-    color:#ecedf2; border-radius:8px; padding:10px; font-size:15px; }
-  .row { display:flex; gap:12px; }
-  .row > div { flex:1; }
-  .opt { display:flex; align-items:center; gap:8px; margin-top:14px; font-size:14px; color:#cfd2da; }
-  button { margin-top:20px; width:100%; background:#5a9cf8; color:#0b1322; border:0;
-           border-radius:8px; padding:12px; font-size:16px; font-weight:600; cursor:pointer; }
-  button:disabled { opacity:.6; cursor:default; }
-  .result { margin-top:18px; padding:14px; background:#1c2a1c; border:1px solid #2f5b2f;
-            border-radius:8px; display:none; }
-  .result.show { display:block; }
-  .result a { color:#9fe0a6; word-break:break-all; }
-  .err { margin-top:14px; color:#ef7676; font-size:14px; min-height:18px; }
-  code { background:#2c313a; padding:1px 5px; border-radius:4px; }
-</style>
+<title>KyberCrypt — Send a file</title>
+<link rel="icon" type="image/svg+xml" href="/static/kybercrypt-icon.svg">
+<link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <div class="card">
-    <h1>Send a file</h1>
-    <p class="sub">Encrypted in your browser's request and stored as ciphertext. Share the link <em>and</em> the passphrase separately.</p>
+  <div class="wrap">
+    <a href="/"><img class="brand-logo" src="/static/kybercrypt-horizontal.svg" alt="KyberCrypt"></a>
+    <div class="card">
+      <h1>Send a file</h1>
+      <p class="sub">Encrypted before storage. Share the link <em>and</em> the passphrase separately. Have an account? <a href="/login">Log in</a> to send by username.</p>
 
-    <form id="f">
-      <label for="file">File (max {{.MaxMB}} MB)</label>
-      <input type="file" id="file" name="file" required>
+      <form id="f">
+        <label for="file">File (max {{.MaxMB}} MB)</label>
+        <input type="file" id="file" name="file" required>
 
-      <label for="passphrase">Passphrase</label>
-      <input type="password" id="passphrase" name="passphrase" required
-             placeholder="the recipient must know this">
+        <label for="passphrase">Passphrase</label>
+        <input type="password" id="passphrase" name="passphrase" required placeholder="the recipient must know this">
 
-      <div class="row">
-        <div>
-          <label for="ttl">Expires in (hours)</label>
-          <input type="number" id="ttl" name="ttl" value="24" min="1" max="720">
+        <label for="ttl">Expires in (hours)</label>
+        <input type="number" id="ttl" name="ttl" value="24" min="1" max="720">
+
+        <div class="opt">
+          <input type="checkbox" id="one_time" name="one_time">
+          <label for="one_time" style="margin:0">Delete after first download</label>
         </div>
-      </div>
 
-      <div class="opt">
-        <input type="checkbox" id="one_time" name="one_time">
-        <label for="one_time" style="margin:0">Delete after first download</label>
-      </div>
+        <button type="submit" id="go">Encrypt &amp; upload</button>
+      </form>
 
-      <button type="submit" id="go">Encrypt &amp; upload</button>
-    </form>
-
-    <div class="err" id="err"></div>
-    <div class="result" id="result">
-      <div>Share this link:</div>
-      <a id="link" href="#"></a>
-      <div style="margin-top:8px; color:#9aa0ac; font-size:13px;">
-        Give the passphrase to the recipient through a different channel.
+      <div class="err" id="err"></div>
+      <div class="result" id="result">
+        <div>Share this link:</div>
+        <a id="link" href="#"></a>
+        <div style="margin-top:8px; color:var(--dim); font-size:13px;">Send the passphrase through a different channel.</div>
       </div>
     </div>
   </div>
-
 <script>
-const f = document.getElementById('f');
-const go = document.getElementById('go');
-const err = document.getElementById('err');
-const result = document.getElementById('result');
-const link = document.getElementById('link');
-
-f.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  err.textContent = '';
-  result.classList.remove('show');
-  go.disabled = true; go.textContent = 'Uploading…';
+const f=document.getElementById('f'), go=document.getElementById('go'),
+      err=document.getElementById('err'), result=document.getElementById('result'),
+      link=document.getElementById('link');
+f.addEventListener('submit', async e => {
+  e.preventDefault(); err.textContent=''; result.classList.remove('show');
+  go.disabled=true; go.textContent='Uploading…';
   try {
-    const data = new FormData(f);
-    const res = await fetch('/api/upload', { method:'POST', body:data });
-    if (!res.ok) { throw new Error(await res.text() || ('HTTP ' + res.status)); }
+    const res = await fetch('/api/upload', {method:'POST', body:new FormData(f)});
+    if(!res.ok){ throw new Error(await res.text() || ('HTTP '+res.status)); }
     const j = await res.json();
-    link.textContent = j.url;
-    link.href = j.url;
-    result.classList.add('show');
-    f.reset();
-  } catch (ex) {
-    err.textContent = ex.message;
-  } finally {
-    go.disabled = false; go.textContent = 'Encrypt & upload';
-  }
+    link.textContent=j.url; link.href=j.url; result.classList.add('show'); f.reset();
+  } catch(ex){ err.textContent=ex.message; }
+  finally { go.disabled=false; go.textContent='Encrypt & upload'; }
 });
 </script>
 </body>
