@@ -17,7 +17,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -30,22 +32,28 @@ type config struct {
 	baseURL    string
 	maxBytes   int64
 	defaultTTL time.Duration
+	secure     bool // mark session cookies Secure (true when served over HTTPS)
 }
 
 func loadConfig() config {
+	baseURL := env("WEB_BASE_URL", "http://127.0.0.1:8090")
 	return config{
 		addr:       env("WEB_ADDR", "127.0.0.1:8090"),
 		dataDir:    env("WEB_DATA_DIR", "./web-data"),
-		baseURL:    env("WEB_BASE_URL", "http://127.0.0.1:8090"),
+		baseURL:    baseURL,
 		maxBytes:   envInt64("WEB_MAX_BYTES", 100<<20), // 100 MiB
 		defaultTTL: envDuration("WEB_TTL", 24*time.Hour),
+		secure:     strings.HasPrefix(baseURL, "https://"),
 	}
 }
 
 type server struct {
-	cfg   config
-	store *store
-	tmpl  *template.Template
+	cfg      config
+	store    *store
+	accounts *accounts
+	msgs     *messages
+	sessions *sessionStore
+	tmpl     *template.Template
 }
 
 func (s *server) render(w http.ResponseWriter, name string, data any) {
@@ -62,18 +70,30 @@ func main() {
 	if err != nil {
 		log.Fatalf("web: data dir: %v", err)
 	}
+	acct, err := newAccounts(filepath.Join(cfg.dataDir, "users"))
+	if err != nil {
+		log.Fatalf("web: accounts dir: %v", err)
+	}
+	msgs, err := newMessages(filepath.Join(cfg.dataDir, "inbox"))
+	if err != nil {
+		log.Fatalf("web: inbox dir: %v", err)
+	}
 
 	tmpl, err := template.ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
 		log.Fatalf("web: templates: %v", err)
 	}
 
-	s := &server{cfg: cfg, store: st, tmpl: tmpl}
+	s := &server{
+		cfg: cfg, store: st, accounts: acct, msgs: msgs,
+		sessions: newSessionStore(12 * time.Hour), tmpl: tmpl,
+	}
 
-	// Periodic sweep of expired items.
+	// Periodic sweep of expired items + inbox messages.
 	go func() {
 		for {
 			s.store.sweep()
+			s.msgs.sweep()
 			time.Sleep(cfg.defaultTTL / 4)
 		}
 	}()
@@ -84,6 +104,17 @@ func main() {
 	mux.HandleFunc("GET /d/{id}", s.handleDownloadPage)
 	mux.HandleFunc("POST /api/download/{id}", s.handleDownload)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
+
+	// Accounts (send-by-username)
+	mux.HandleFunc("GET /register", s.handleRegisterPage)
+	mux.HandleFunc("POST /api/register", s.handleRegister)
+	mux.HandleFunc("GET /login", s.handleLoginPage)
+	mux.HandleFunc("POST /api/login", s.handleLogin)
+	mux.HandleFunc("POST /api/logout", s.handleLogout)
+	mux.HandleFunc("GET /app", s.handleApp)
+	mux.HandleFunc("POST /api/send", s.handleSend)
+	mux.HandleFunc("GET /api/msg/{id}", s.handleMsgDownload)
+	mux.HandleFunc("POST /api/msg/{id}/delete", s.handleMsgDelete)
 
 	srv := &http.Server{
 		Addr:              cfg.addr,

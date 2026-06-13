@@ -33,6 +33,29 @@ func deriveKey(passphrase string, salt []byte) ([]byte, error) {
 	return pbkdf2.Key(sha256.New, passphrase, salt, pbkdf2Iter, keyLen)
 }
 
+// packPayload frames {filename, data} as uint16(len(filename)) + filename + data.
+func packPayload(filename string, data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := binary.Write(&buf, binary.LittleEndian, uint16(len(filename))); err != nil {
+		return nil, err
+	}
+	buf.WriteString(filename)
+	buf.Write(data)
+	return buf.Bytes(), nil
+}
+
+// unpackPayload reverses packPayload.
+func unpackPayload(payload []byte) (filename string, data []byte, err error) {
+	if len(payload) < 2 {
+		return "", nil, errors.New("short payload")
+	}
+	nameLen := int(binary.LittleEndian.Uint16(payload[:2]))
+	if 2+nameLen > len(payload) {
+		return "", nil, errors.New("bad payload")
+	}
+	return string(payload[2 : 2+nameLen]), payload[2+nameLen:], nil
+}
+
 func deflateBytes(in []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	zw, err := flate.NewWriter(&buf, flate.DefaultCompression)
@@ -65,14 +88,11 @@ func seal(passphrase, filename string, data []byte) (salt, nonce, ct []byte, err
 		return
 	}
 
-	var payload bytes.Buffer
-	if err = binary.Write(&payload, binary.LittleEndian, uint16(len(filename))); err != nil {
+	raw, err := packPayload(filename, data)
+	if err != nil {
 		return
 	}
-	payload.WriteString(filename)
-	payload.Write(data)
-
-	compressed, err := deflateBytes(payload.Bytes())
+	compressed, err := deflateBytes(raw)
 	if err != nil {
 		return
 	}
@@ -115,14 +135,9 @@ func open(passphrase string, salt, nonce, ct []byte) (filename string, data []by
 	if err != nil {
 		return "", nil, errBadPassphrase
 	}
-	if len(payload) < 2 {
+	fn, d, perr := unpackPayload(payload)
+	if perr != nil {
 		return "", nil, errBadPassphrase
 	}
-	nameLen := int(binary.LittleEndian.Uint16(payload[:2]))
-	if 2+nameLen > len(payload) {
-		return "", nil, errBadPassphrase
-	}
-	filename = string(payload[2 : 2+nameLen])
-	data = payload[2+nameLen:]
-	return filename, data, nil
+	return fn, d, nil
 }
