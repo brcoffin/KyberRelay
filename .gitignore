@@ -1,0 +1,45 @@
+# Build output
+build/
+*.exe
+*.obj
+*.o
+*.a
+*.lib
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+_deps/
+
+# Auto-downloaded single-file libraries (re-fetched by CMake on configure)
+lib/miniz.c
+lib/miniz.h
+lib/raygui.h
+lib/tinyfiledialogs.c
+lib/tinyfiledialogs.h
+
+# Bundled prebuilt libsodium (large binaries — provide via vcpkg/system,
+# or drop a prebuilt MSVC build here locally; see README)
+lib/libsodium-msvc/
+lib/*.zip
+
+# Local agent / editor state
+.claude/
+
+# Relay runtime data
+relay/data/
+relay/relay
+relay/relay.exe
+
+# Secure-transfer workflow artifacts
+sent-log.jsonl
+received-log.jsonl
+codes.txt
+outbox/
+sent/
+inbox/
+
+# Archives and key material (never commit)
+*.kyz
+*.pub
+*.kyp
