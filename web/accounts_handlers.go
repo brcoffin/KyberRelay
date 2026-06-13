@@ -22,6 +22,70 @@ func jsonError(w http.ResponseWriter, code int, msg string) {
 	http.Error(w, msg, code)
 }
 
+// readUpload reads the "file" part of a multipart request fully into memory.
+func readUpload(r *http.Request) (filename string, data []byte, err error) {
+	file, hdr, err := r.FormFile("file")
+	if err != nil {
+		return "", nil, err
+	}
+	defer file.Close()
+	data = make([]byte, 0, hdr.Size)
+	buf := make([]byte, 64*1024)
+	for {
+		n, rerr := file.Read(buf)
+		data = append(data, buf[:n]...)
+		if rerr != nil {
+			break
+		}
+	}
+	return hdr.Filename, data, nil
+}
+
+// encryptAndStore encapsulates to the recipient's public key, seals the file,
+// and drops it in their inbox. Shared by the browser and API send handlers.
+func (s *server) encryptAndStore(sender, recipient, filename string, data []byte) (string, error) {
+	ru, err := s.accounts.load(recipient)
+	if err != nil {
+		return "", errNoSuchUser
+	}
+	ek, err := mlkem.NewEncapsulationKey768(ru.PubKey)
+	if err != nil {
+		return "", err
+	}
+	sharedKey, kemCt := ek.Encapsulate()
+	nonce, ct, err := sealWithKey(sharedKey, filename, data)
+	if err != nil {
+		return "", err
+	}
+	id, err := newID()
+	if err != nil {
+		return "", err
+	}
+	msg := Message{
+		ID: id, Sender: sender, Recipient: recipient,
+		KemCt: kemCt, Nonce: nonce, Size: int64(len(data)),
+		Created: time.Now().Unix(),
+		Expires: time.Now().Add(s.cfg.defaultTTL).Unix(),
+	}
+	if err := s.msgs.put(msg, ct); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// decryptMessage fetches and decrypts one inbox message with the given key.
+func (s *server) decryptMessage(dk *mlkem.DecapsulationKey768, username, id string) (string, []byte, error) {
+	msg, ct, err := s.msgs.get(username, id)
+	if err != nil {
+		return "", nil, err
+	}
+	sharedKey, err := dk.Decapsulate(msg.KemCt)
+	if err != nil {
+		return "", nil, err
+	}
+	return openWithKey(sharedKey, msg.Nonce, ct)
+}
+
 // GET /register, GET /login — pages.
 func (s *server) handleRegisterPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "register.html", nil)
@@ -113,9 +177,11 @@ func (s *server) handleApp(w http.ResponseWriter, r *http.Request) {
 			When:   time.Unix(m.Created, 0).UTC().Format("2006-01-02 15:04 UTC"),
 		})
 	}
+	keys := s.apikeys.list(sess.username)
 	s.render(w, "app.html", map[string]any{
 		"User":  sess.username,
 		"Inbox": rows,
+		"Keys":  keys,
 		"MaxMB": s.cfg.maxBytes / (1 << 20),
 	})
 }
@@ -133,56 +199,19 @@ func (s *server) handleSend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	recipient := r.FormValue("recipient")
-	ru, err := s.accounts.load(recipient)
-	if err != nil {
-		jsonError(w, http.StatusNotFound, "no such recipient")
-		return
-	}
-
-	file, hdr, err := r.FormFile("file")
+	filename, data, err := readUpload(r)
 	if err != nil {
 		jsonError(w, http.StatusBadRequest, "no file provided")
 		return
 	}
-	defer file.Close()
-	data := make([]byte, 0, hdr.Size)
-	buf := make([]byte, 64*1024)
-	for {
-		n, rerr := file.Read(buf)
-		data = append(data, buf[:n]...)
-		if rerr != nil {
-			break
+	if _, err := s.encryptAndStore(sess.username, recipient, filename, data); err != nil {
+		if err == errNoSuchUser {
+			jsonError(w, http.StatusNotFound, "no such recipient")
+		} else {
+			jsonError(w, http.StatusInternalServerError, "send failed")
 		}
-	}
-
-	ek, err := mlkem.NewEncapsulationKey768(ru.PubKey)
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "recipient key invalid")
 		return
 	}
-	sharedKey, kemCt := ek.Encapsulate()
-	nonce, ct, err := sealWithKey(sharedKey, hdr.Filename, data)
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "encryption failed")
-		return
-	}
-
-	id, err := newID()
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	msg := Message{
-		ID: id, Sender: sess.username, Recipient: recipient,
-		KemCt: kemCt, Nonce: nonce, Size: int64(len(data)),
-		Created: time.Now().Unix(),
-		Expires: time.Now().Add(s.cfg.defaultTTL).Unix(),
-	}
-	if err := s.msgs.put(msg, ct); err != nil {
-		jsonError(w, http.StatusInternalServerError, "storage failed")
-		return
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"ok": "sent to " + recipient})
 }
@@ -198,19 +227,9 @@ func (s *server) handleMsgDownload(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	msg, ct, err := s.msgs.get(sess.username, id)
+	filename, data, err := s.decryptMessage(sess.dk, sess.username, id)
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-	sharedKey, err := sess.dk.Decapsulate(msg.KemCt)
-	if err != nil {
-		http.Error(w, "decapsulation failed", http.StatusInternalServerError)
-		return
-	}
-	filename, data, err := openWithKey(sharedKey, msg.Nonce, ct)
-	if err != nil {
-		http.Error(w, "decryption failed", http.StatusInternalServerError)
 		return
 	}
 	if filename == "" {

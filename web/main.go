@@ -56,6 +56,7 @@ type server struct {
 	store    *store
 	accounts *accounts
 	msgs     *messages
+	apikeys  *apikeyStore
 	sessions *sessionStore
 	tmpl     *template.Template
 }
@@ -82,6 +83,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("web: inbox dir: %v", err)
 	}
+	keys, err := newAPIKeyStore(filepath.Join(cfg.dataDir, "apikeys"))
+	if err != nil {
+		log.Fatalf("web: apikeys dir: %v", err)
+	}
 
 	tmpl, err := template.ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
@@ -89,7 +94,7 @@ func main() {
 	}
 
 	s := &server{
-		cfg: cfg, store: st, accounts: acct, msgs: msgs,
+		cfg: cfg, store: st, accounts: acct, msgs: msgs, apikeys: keys,
 		sessions: newSessionStore(12 * time.Hour), tmpl: tmpl,
 	}
 
@@ -124,6 +129,17 @@ func main() {
 	mux.HandleFunc("POST /api/send", s.handleSend)
 	mux.HandleFunc("GET /api/msg/{id}", s.handleMsgDownload)
 	mux.HandleFunc("POST /api/msg/{id}/delete", s.handleMsgDelete)
+
+	// API key management (session-authenticated, from the dashboard)
+	mux.HandleFunc("POST /api/keys", s.handleKeyCreate)
+	mux.HandleFunc("GET /api/keys", s.handleKeyList)
+	mux.HandleFunc("POST /api/keys/{id}/delete", s.handleKeyRevoke)
+
+	// Programmatic API (Bearer token auth)
+	mux.HandleFunc("POST /api/v1/send", s.apiSend)
+	mux.HandleFunc("GET /api/v1/inbox", s.apiInbox)
+	mux.HandleFunc("GET /api/v1/messages/{id}", s.apiMsgGet)
+	mux.HandleFunc("DELETE /api/v1/messages/{id}", s.apiMsgDelete)
 
 	srv := &http.Server{
 		Addr:              cfg.addr,

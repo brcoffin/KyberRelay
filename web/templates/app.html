@@ -48,6 +48,32 @@
       <div class="empty">No messages yet.</div>
       {{end}}
     </div>
+
+    <div class="card">
+      <h2>API keys</h2>
+      <p class="sub">For scripts &amp; automation (<code>Authorization: Bearer …</code>). A key can send <em>and</em> decrypt on your behalf — treat it like a password. The token is shown once.</p>
+      <form id="keyf">
+        <label for="label">Label</label>
+        <input id="label" name="label" placeholder="e.g. backup-script">
+        <button class="primary" type="submit">Create key</button>
+      </form>
+      <div class="result" id="keyresult">
+        <div>New token — copy it now, it won't be shown again:</div>
+        <code id="keytoken" style="word-break:break-all; color:var(--accent-light); font-size:13px;"></code>
+      </div>
+      {{if .Keys}}
+      <table style="margin-top:14px">
+        <tr><th>Label</th><th>Key ID</th><th></th></tr>
+        {{range .Keys}}
+        <tr>
+          <td>{{.Label}}</td>
+          <td>{{.KeyID}}</td>
+          <td><form method="post" action="/api/keys/{{.KeyID}}/delete" style="margin:0"><button class="del" type="submit">Revoke</button></form></td>
+        </tr>
+        {{end}}
+      </table>
+      {{end}}
+    </div>
   </main>
 <script>
 const sf=document.getElementById('sendf'), st=document.getElementById('status');
@@ -56,6 +82,12 @@ sf.addEventListener('submit', async e => {
   const res = await fetch('/api/send', {method:'POST', body:new FormData(sf)});
   if(res.ok){ const j=await res.json(); st.style.color='var(--ok)'; st.textContent=j.ok; sf.reset(); }
   else { st.style.color='var(--err)'; st.textContent=await res.text(); }
+});
+const kf=document.getElementById('keyf'), kr=document.getElementById('keyresult'), kt=document.getElementById('keytoken');
+kf.addEventListener('submit', async e => {
+  e.preventDefault();
+  const res = await fetch('/api/keys', {method:'POST', body:new FormData(kf)});
+  if(res.ok){ const j=await res.json(); kt.textContent=j.token; kr.classList.add('show'); kf.reset(); }
 });
 </script>
 </body>
