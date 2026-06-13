@@ -41,7 +41,7 @@ Requires Go 1.24+ (stdlib only — uses `crypto/pbkdf2`, AES-GCM, deflate).
 ```sh
 cd web
 go build -o web .
-WEB_ADDR=:8090 WEB_BASE_URL=https://send.example.com ./web
+WEB_ADDR=:8090 WEB_BASE_URL=https://yourdomain.com ./web   # bare domain is canonical
 ```
 
 Open http://localhost:8090.

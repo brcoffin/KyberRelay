@@ -1,6 +1,7 @@
 # KyberCrypt Web API
 
-Programmatic access to the hosted service. Base URL: `https://send.kybercrypt.com`.
+Programmatic access to the hosted service. Base URL: `https://kybercrypt.com`
+(the `send.kybercrypt.com` alias also works).
 
 There are two surfaces:
 - **Account API (`/api/v1/...`)** — authenticated with a per-user **API key** (Bearer token). Send to other users by username, list your inbox, download (decrypt).
@@ -28,7 +29,7 @@ multipart/form-data: `recipient` (username), `file`.
 ```sh
 curl -H "Authorization: Bearer $TOKEN" \
      -F recipient=bob -F file=@report.pdf \
-     https://send.kybercrypt.com/api/v1/send
+     https://kybercrypt.com/api/v1/send
 # -> {"id":"<msgid>","recipient":"bob"}
 ```
 
@@ -36,7 +37,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 List messages addressed to you.
 
 ```sh
-curl -H "Authorization: Bearer $TOKEN" https://send.kybercrypt.com/api/v1/inbox
+curl -H "Authorization: Bearer $TOKEN" https://kybercrypt.com/api/v1/inbox
 # -> {"messages":[{"id":"...","from":"alice","size":12345,"created":1781388097}]}
 ```
 
@@ -46,7 +47,7 @@ Download and decrypt one message. Returns the raw file with a
 
 ```sh
 curl -H "Authorization: Bearer $TOKEN" -OJ \
-     https://send.kybercrypt.com/api/v1/messages/<msgid>
+     https://kybercrypt.com/api/v1/messages/<msgid>
 ```
 
 ### `DELETE /api/v1/messages/{id}`
@@ -54,7 +55,7 @@ Delete a message from your inbox. Returns `204 No Content`.
 
 ```sh
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
-     https://send.kybercrypt.com/api/v1/messages/<msgid>
+     https://kybercrypt.com/api/v1/messages/<msgid>
 ```
 
 ### Errors

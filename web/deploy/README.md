@@ -9,7 +9,9 @@ HTTPS) on an Ubuntu/Debian droplet. The web service and the relay can run on the
 - Basic droplet, **Ubuntu 24.04 LTS**, 1 vCPU / 1–2 GB RAM. Disk sized for peak
   *undelivered* data (uploads-per-TTL × avg size); attach a Block Storage volume
   and point `WEB_DATA_DIR` at it for heavy use.
-- **A record** `send.yourdomain.com → droplet IP`.
+- **A records → droplet IP.** The bare domain (`yourdomain.com`) is canonical
+  and serves the app; `send.yourdomain.com` is kept as an alias. Add A records
+  for both.
 - Open only 22 / 80 / 443:
   ```sh
   ufw allow 22,80,443/tcp && ufw enable
@@ -39,10 +41,11 @@ Creates the `kyber-web` user, installs the binary, data dir
 (`/var/lib/kyber-web`), config (`/etc/kyber-web/kyber-web.env`), and a hardened
 systemd unit, then enables + starts it.
 
-**Then set the public URL** (used to build share links):
+**Then set the public URL** — the canonical (bare) domain, used to build share
+links:
 
 ```sh
-sudo sed -i 's#https://send.example.com#https://send.yourdomain.com#' /etc/kyber-web/kyber-web.env
+sudo sed -i 's#https://kybercrypt.com#https://yourdomain.com#' /etc/kyber-web/kyber-web.env
 sudo systemctl restart kyber-web
 curl -s http://127.0.0.1:8090/healthz      # -> ok
 ```
@@ -50,22 +53,23 @@ curl -s http://127.0.0.1:8090/healthz      # -> ok
 ## 4. TLS via Caddy
 
 ```sh
-sudo cp deploy/Caddyfile /etc/caddy/Caddyfile      # or append this site block
-sudo sed -i 's/send.example.com/send.yourdomain.com/' /etc/caddy/Caddyfile
+sudo cp deploy/Caddyfile /etc/caddy/Caddyfile      # or append these site blocks
+sudo sed -i 's/kybercrypt.com/yourdomain.com/g' /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
 (See `relay/deploy/README.md` for installing Caddy itself.) Then from any
-browser: `https://send.yourdomain.com`.
+browser: `https://yourdomain.com` (and the `send.` alias).
 
 ### Running alongside the relay
 
-Both services coexist on one droplet — just keep two site blocks in
+All three coexist on one droplet — keep the site blocks together in
 `/etc/caddy/Caddyfile`:
 
 ```
 relay.yourdomain.com { reverse_proxy 127.0.0.1:8080 }   # zero-knowledge relay
-send.yourdomain.com  { reverse_proxy 127.0.0.1:8090 }   # hosted web service
+yourdomain.com       { reverse_proxy 127.0.0.1:8090 }   # web app (canonical)
+send.yourdomain.com  { reverse_proxy 127.0.0.1:8090 }   # web app (alias)
 ```
 
 ## Operations

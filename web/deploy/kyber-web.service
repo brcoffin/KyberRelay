@@ -15,7 +15,7 @@ ExecStart=/usr/local/bin/kyber-web
 # WEB_BASE_URL MUST be the public https URL (used to build share links).
 Environment=WEB_ADDR=127.0.0.1:8090
 Environment=WEB_DATA_DIR=/var/lib/kyber-web/data
-Environment=WEB_BASE_URL=https://send.example.com
+Environment=WEB_BASE_URL=https://kybercrypt.com
 Environment=WEB_MAX_BYTES=104857600
 Environment=WEB_TTL=24h
 EnvironmentFile=-/etc/kyber-web/kyber-web.env
