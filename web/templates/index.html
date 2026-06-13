@@ -20,6 +20,7 @@
 
         <label for="passphrase">Passphrase</label>
         <input type="password" id="passphrase" name="passphrase" required placeholder="the recipient must know this">
+        <button type="button" id="genpass" class="link-btn">Generate strong passphrase</button>
 
         <label for="ttl">Expires in (hours)</label>
         <input type="number" id="ttl" name="ttl" value="24" min="1" max="720">
@@ -41,6 +42,15 @@
     </div>
   </div>
 <script>
+// Generate a strong passphrase with the browser's crypto RNG, fill the field,
+// and reveal it so it can be copied.
+document.getElementById('genpass').addEventListener('click', () => {
+  const cs = 'abcdefghjkmnpqrstuvwxyz23456789'; // unambiguous (no 0/O/1/l/I)
+  const a = new Uint8Array(20); crypto.getRandomValues(a);
+  let s = ''; for (const b of a) s += cs[b % cs.length];
+  const pw = document.getElementById('passphrase');
+  pw.type = 'text'; pw.value = s; pw.focus();
+});
 const f=document.getElementById('f'), go=document.getElementById('go'),
       err=document.getElementById('err'), result=document.getElementById('result'),
       link=document.getElementById('link');
