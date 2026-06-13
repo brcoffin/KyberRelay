@@ -1,0 +1,38 @@
+[Unit]
+Description=Kyber-Zip secure-transfer relay
+Documentation=https://github.com/brcoffin/KyberRelay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kyber-relay
+Group=kyber-relay
+ExecStart=/usr/local/bin/kyber-relay
+
+# Defaults — override any of these in /etc/kyber-relay/kyber-relay.env.
+# Listen on localhost only; Caddy terminates TLS and reverse-proxies to this.
+Environment=RELAY_ADDR=127.0.0.1:8080
+Environment=RELAY_DATA_DIR=/var/lib/kyber-relay/data
+Environment=RELAY_TTL=24h
+Environment=RELAY_MAX_BYTES=2147483648
+EnvironmentFile=-/etc/kyber-relay/kyber-relay.env
+
+Restart=on-failure
+RestartSec=3
+
+# Hardening — the relay only needs to write inside its data dir and talk TCP.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=true
+ReadWritePaths=/var/lib/kyber-relay
+
+[Install]
+WantedBy=multi-user.target

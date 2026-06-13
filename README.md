@@ -125,6 +125,10 @@ The relay is started wherever both ends can reach it:
 RELAY_ADDR=:8080 RELAY_TTL=24h ./relay.exe      # see relay/README.md for TLS
 ```
 
+To run it on a server (DigitalOcean droplet, systemd + automatic HTTPS via
+Caddy), see **`relay/deploy/`** — it has a ready-to-use service unit, Caddyfile,
+installer, and a step-by-step guide.
+
 ---
 
 ## Automation: watched folders

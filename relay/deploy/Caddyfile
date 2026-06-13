@@ -1,0 +1,13 @@
+# Kyber-Zip relay — Caddy v2 reverse proxy with automatic HTTPS.
+#
+# Replace relay.example.com with your domain (an A record must point it at the
+# droplet's IP). Caddy provisions and renews a Let's Encrypt certificate
+# automatically, so the client can use https://relay.example.com.
+#
+# Caddy v2 streams request/response bodies and imposes no upload size limit by
+# default, so large .kyz uploads pass straight through; the relay itself caps
+# size via RELAY_MAX_BYTES. No timeout tuning is needed for big transfers.
+
+relay.example.com {
+	reverse_proxy 127.0.0.1:8080
+}

@@ -69,6 +69,13 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/v1/blob/$code
 cmp secret.kyz roundtrip.kyz && echo "OK: identical"
 ```
 
+## Deploying to a server
+
+See [`deploy/`](deploy/) for a production setup on a DigitalOcean droplet
+(or any Ubuntu/Debian host): a hardened systemd unit, a Caddy reverse-proxy
+config with automatic HTTPS, a cross-compile script, an installer, and a
+step-by-step guide.
+
 ## Notes
 
 - Storage is the filesystem (`data/<code>`). It survives restarts; swap for an
