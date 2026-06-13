@@ -1,0 +1,12 @@
+# Store text files as LF in the repo; let Git handle working-tree endings.
+* text=auto
+
+# Files that run on Linux MUST keep LF in the working tree too, or they break
+# (shell shebangs, systemd units, Caddy config).
+*.sh          text eol=lf
+*.service     text eol=lf
+*.env.example text eol=lf
+Caddyfile     text eol=lf
+*.go          text eol=lf
+go.mod        text eol=lf
+go.sum        text eol=lf
