@@ -108,10 +108,9 @@ func main() {
 	}()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /", s.handleIndex)
-	mux.HandleFunc("POST /api/upload", s.handleUpload)
-	mux.HandleFunc("GET /d/{id}", s.handleDownloadPage)
-	mux.HandleFunc("POST /api/download/{id}", s.handleDownload)
+	// Account-first: "/" routes to the app or login. The anonymous
+	// link+passphrase endpoints are intentionally not registered.
+	mux.HandleFunc("GET /", s.handleRoot)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 
 	// Static assets (logos, stylesheet) served from the embedded FS.

@@ -44,6 +44,15 @@ func readUpload(r *http.Request) (filename string, data []byte, err error) {
 // encryptAndStore encapsulates to the recipient's public key, seals the file,
 // and drops it in their inbox. Shared by the browser and API send handlers.
 func (s *server) encryptAndStore(sender, recipient, filename string, data []byte) (string, error) {
+	// The sender's plan governs the size limit and retention.
+	plan := planFor("free")
+	if su, err := s.accounts.load(sender); err == nil {
+		plan = planFor(su.Plan)
+	}
+	if int64(len(data)) > plan.MaxFileBytes {
+		return "", errTooLarge
+	}
+
 	ru, err := s.accounts.load(recipient)
 	if err != nil {
 		return "", errNoSuchUser
@@ -65,7 +74,7 @@ func (s *server) encryptAndStore(sender, recipient, filename string, data []byte
 		ID: id, Sender: sender, Recipient: recipient,
 		KemCt: kemCt, Nonce: nonce, Size: int64(len(data)),
 		Created: time.Now().Unix(),
-		Expires: time.Now().Add(s.cfg.defaultTTL).Unix(),
+		Expires: time.Now().Add(plan.TTL).Unix(),
 	}
 	if err := s.msgs.put(msg, ct); err != nil {
 		return "", err
@@ -161,6 +170,19 @@ func humanSize(n int64) string {
 	}
 }
 
+// GET / — account-first landing: send logged-in users to the app, others to login.
+func (s *server) handleRoot(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	if _, ok := s.sessions.current(r); ok {
+		http.Redirect(w, r, "/app", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
 // GET /app — dashboard (send form + inbox). Requires login.
 func (s *server) handleApp(w http.ResponseWriter, r *http.Request) {
 	sess, ok := s.sessions.current(r)
@@ -177,12 +199,18 @@ func (s *server) handleApp(w http.ResponseWriter, r *http.Request) {
 			When:   time.Unix(m.Created, 0).UTC().Format("2006-01-02 15:04 UTC"),
 		})
 	}
+	plan := planFor("free")
+	if u, err := s.accounts.load(sess.username); err == nil {
+		plan = planFor(u.Plan)
+	}
 	keys := s.apikeys.list(sess.username)
 	s.render(w, "app.html", map[string]any{
-		"User":  sess.username,
-		"Inbox": rows,
-		"Keys":  keys,
-		"MaxMB": s.cfg.maxBytes / (1 << 20),
+		"User":       sess.username,
+		"Inbox":      rows,
+		"Keys":       keys,
+		"Plan":       plan.Label,
+		"MaxMB":      plan.MaxFileBytes / (1 << 20),
+		"RetentionH": int(plan.TTL.Hours()),
 	})
 }
 
@@ -205,9 +233,12 @@ func (s *server) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := s.encryptAndStore(sess.username, recipient, filename, data); err != nil {
-		if err == errNoSuchUser {
+		switch err {
+		case errNoSuchUser:
 			jsonError(w, http.StatusNotFound, "no such recipient")
-		} else {
+		case errTooLarge:
+			jsonError(w, http.StatusRequestEntityTooLarge, err.Error())
+		default:
 			jsonError(w, http.StatusInternalServerError, "send failed")
 		}
 		return

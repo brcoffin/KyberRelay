@@ -49,9 +49,12 @@ func (s *server) apiSend(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := s.encryptAndStore(username, recipient, filename, data)
 	if err != nil {
-		if err == errNoSuchUser {
+		switch err {
+		case errNoSuchUser:
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such recipient"})
-		} else {
+		case errTooLarge:
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": err.Error()})
+		default:
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "send failed"})
 		}
 		return

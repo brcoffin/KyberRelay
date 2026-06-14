@@ -32,6 +32,7 @@ var (
 	errUserExists = errors.New("username already taken")
 	errBadLogin   = errors.New("invalid username or password")
 	errNoSuchUser = errors.New("no such user")
+	errTooLarge   = errors.New("file exceeds your plan's size limit")
 	validUsername = regexp.MustCompile(`^[a-z0-9_-]{3,32}$`)
 )
 
@@ -43,6 +44,7 @@ type User struct {
 	SaltWrap   []byte `json:"salt_wrap"`
 	WrapNonce  []byte `json:"wrap_nonce"`
 	WrappedKey []byte `json:"wrapped_key"` // AES-GCM-wrapped 64-byte decapsulation seed
+	Plan       string `json:"plan"`        // "" / "free" / "pro"
 	Created    int64  `json:"created"`
 }
 
@@ -133,7 +135,7 @@ func (a *accounts) register(username, password string) (*User, error) {
 	u := &User{
 		Username: username, SaltAuth: saltAuth, PwHash: pwHash, PubKey: pub,
 		SaltWrap: saltWrap, WrapNonce: wrapNonce, WrappedKey: wrapped,
-		Created: time.Now().Unix(),
+		Plan: "free", Created: time.Now().Unix(),
 	}
 	b, err := json.Marshal(u)
 	if err != nil {
