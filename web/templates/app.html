@@ -114,6 +114,20 @@
       {{end}}
       <div class="status" id="tfa-status"></div>
     </div>
+
+    <div class="card">
+      <h2>Recent activity</h2>
+      {{if .Activity}}
+      <table>
+        <tr><th>When</th><th>Event</th><th>Detail</th></tr>
+        {{range .Activity}}
+        <tr><td>{{.When}}</td><td>{{.Event}}</td><td>{{.Detail}}</td></tr>
+        {{end}}
+      </table>
+      {{else}}
+      <div class="empty">No recent activity.</div>
+      {{end}}
+    </div>
   </main>
 <script src="/static/app.js"></script>
 </body>

@@ -73,12 +73,14 @@ func (s *server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 			u.StripeCustomerID = obj.Customer
 			u.StripeSubID = obj.Subscription
 			_ = s.accounts.save(u)
+			s.audit.log("plan_upgraded", u.Username, "stripe", "pro")
 		}
 	case "customer.subscription.deleted":
 		if u, ok := s.accounts.findByStripeCustomer(ev.Data.Object.Customer); ok {
 			u.Plan = "free"
 			u.StripeSubID = ""
 			_ = s.accounts.save(u)
+			s.audit.log("plan_downgraded", u.Username, "stripe", "free")
 		}
 	}
 	w.WriteHeader(http.StatusOK)

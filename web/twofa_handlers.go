@@ -69,6 +69,7 @@ func (s *server) handle2FAEnable(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "could not save")
 		return
 	}
+	s.audit.log("2fa_enabled", sess.username, clientIP(r), "")
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -97,5 +98,6 @@ func (s *server) handle2FADisable(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "could not save")
 		return
 	}
+	s.audit.log("2fa_disabled", sess.username, clientIP(r), "")
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

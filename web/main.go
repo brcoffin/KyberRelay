@@ -61,6 +61,7 @@ type server struct {
 	pending    *pendingStore
 	loginGuard *loginGuard
 	billing    *billingConfig
+	audit      *auditor
 	tmpl       *template.Template
 }
 
@@ -102,6 +103,7 @@ func main() {
 		pending:    newPendingStore(5 * time.Minute),
 		loginGuard: newLoginGuard(5, 15*time.Minute),
 		billing:    loadBilling(),
+		audit:      newAuditor(cfg.dataDir),
 		tmpl:       tmpl,
 	}
 

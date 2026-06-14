@@ -123,6 +123,7 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.startSession(w, username, dk)
+	s.audit.log("register", username, clientIP(r), "")
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"ok":true}`))
 }
@@ -141,6 +142,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.loginGuard.fail("u:" + username)
 		s.loginGuard.fail("ip:" + ip)
+		s.audit.log("login_failed", username, ip, "")
 		jsonError(w, http.StatusUnauthorized, "invalid username or password")
 		return
 	}
@@ -163,6 +165,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.startSession(w, username, dk)
+	s.audit.log("login", username, ip, "")
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -180,12 +183,14 @@ func (s *server) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if !totpVerify(pl.totpSecret, r.FormValue("code")) {
 		s.loginGuard.fail(guardKey)
+		s.audit.log("totp_failed", pl.username, clientIP(r), "")
 		jsonError(w, http.StatusUnauthorized, "invalid code")
 		return
 	}
 	s.loginGuard.reset(guardKey)
 	s.pending.del(r.FormValue("pending"))
 	s.startSession(w, pl.username, pl.dk)
+	s.audit.log("login", pl.username, clientIP(r), "2fa")
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -200,6 +205,9 @@ func (s *server) startSession(w http.ResponseWriter, username string, dk *mlkem.
 // POST /api/logout.
 func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(sessionCookie); err == nil {
+		if sess, ok := s.sessions.get(c.Value); ok {
+			s.audit.log("logout", sess.username, clientIP(r), "")
+		}
 		s.sessions.destroy(c.Value)
 	}
 	clearSessionCookie(w, s.cfg.secure)
@@ -268,10 +276,20 @@ func (s *server) handleApp(w http.ResponseWriter, r *http.Request) {
 		}
 		keyRows = append(keyRows, keyRow{k.KeyID, k.Label, k.Scope, exp})
 	}
+	type actRow struct{ When, Event, Detail string }
+	var activity []actRow
+	for _, e := range s.audit.recentForUser(sess.username, 12) {
+		when := e.Time
+		if t, err := time.Parse(time.RFC3339, e.Time); err == nil {
+			when = t.UTC().Format("2006-01-02 15:04 UTC")
+		}
+		activity = append(activity, actRow{when, e.Event, e.Detail})
+	}
 	s.render(w, "app.html", map[string]any{
 		"User":        sess.username,
 		"Inbox":       rows,
 		"Keys":        keyRows,
+		"Activity":    activity,
 		"Plan":        plan.Label,
 		"MaxMB":       plan.MaxFileBytes / (1 << 20),
 		"RetentionH":  int(plan.TTL.Hours()),
@@ -308,6 +326,7 @@ func (s *server) handleSend(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	s.audit.log("sent", sess.username, clientIP(r), recipient)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"ok": "sent to " + recipient})
 }
@@ -331,6 +350,7 @@ func (s *server) handleMsgDownload(w http.ResponseWriter, r *http.Request) {
 	if filename == "" {
 		filename = "download.bin"
 	}
+	s.audit.log("downloaded", sess.username, clientIP(r), id)
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	_, _ = w.Write(data)

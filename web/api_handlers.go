@@ -67,6 +67,7 @@ func (s *server) apiSend(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	s.audit.log("sent", username, clientIP(r), recipient+" (api)")
 	writeJSON(w, http.StatusOK, map[string]string{"id": id, "recipient": recipient})
 }
 
@@ -116,6 +117,7 @@ func (s *server) apiMsgGet(w http.ResponseWriter, r *http.Request) {
 	if filename == "" {
 		filename = "download.bin"
 	}
+	s.audit.log("downloaded", username, clientIP(r), id+" (api)")
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	_, _ = w.Write(data)
@@ -167,6 +169,7 @@ func (s *server) handleKeyCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not create key"})
 		return
 	}
+	s.audit.log("apikey_created", sess.username, clientIP(r), scope)
 	writeJSON(w, http.StatusOK, map[string]string{"token": token, "label": label, "scope": scope})
 }
 
@@ -190,5 +193,6 @@ func (s *server) handleKeyRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.apikeys.revoke(sess.username, r.PathValue("id"))
+	s.audit.log("apikey_revoked", sess.username, clientIP(r), r.PathValue("id"))
 	http.Redirect(w, r, "/app", http.StatusSeeOther)
 }
