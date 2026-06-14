@@ -19,7 +19,7 @@
   <main>
     <div class="card">
       <h2>Send a file</h2>
-      <p class="sub">Plan: <strong>{{.Plan}}</strong> — files up to {{.MaxMB}} MB, {{.RetentionH}}h retention.</p>
+      <p class="sub">Plan: <strong>{{.Plan}}</strong> — files up to {{.MaxMB}} MB, {{.RetentionH}}h retention.{{if ne .Plan "Pro"}} <a href="/pricing">Upgrade →</a>{{end}}</p>
       <form id="sendf">
         <label for="recipient">Recipient username</label>
         <input id="recipient" name="recipient" required placeholder="who it's for">

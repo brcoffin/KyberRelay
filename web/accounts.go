@@ -72,6 +72,35 @@ type User struct {
 	TOTPEnabled bool   `json:"totp_enabled,omitempty"`
 	TOTPNonce   []byte `json:"totp_nonce,omitempty"`
 	TOTPSecret  []byte `json:"totp_secret,omitempty"`
+
+	// Billing (Stripe).
+	StripeCustomerID string `json:"stripe_customer_id,omitempty"`
+	StripeSubID      string `json:"stripe_sub_id,omitempty"`
+}
+
+// findByStripeCustomer scans for the user with the given Stripe customer ID.
+func (a *accounts) findByStripeCustomer(custID string) (*User, bool) {
+	if custID == "" {
+		return nil, false
+	}
+	entries, err := os.ReadDir(a.dir)
+	if err != nil {
+		return nil, false
+	}
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) != ".json" {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(a.dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var u User
+		if json.Unmarshal(b, &u) == nil && u.StripeCustomerID == custID {
+			return &u, true
+		}
+	}
+	return nil, false
 }
 
 // save atomically writes a user record (used for profile updates like 2FA).

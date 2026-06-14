@@ -104,8 +104,16 @@ button:disabled { opacity: .6; cursor: default; }
 .mt14 { margin-top: 14px; }
 .token { word-break: break-all; color: var(--accent-light); font-size: 13px; }
 .hidden { display: none; }
+
+/* pricing */
+.plans { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+.plan { width: min(300px, 92vw); }
+.plan .price { font-size: 28px; font-weight: 700; color: var(--navy); margin: 4px 0 14px; }
+.plan ul { margin: 0 0 18px; padding-left: 18px; color: #33425e; font-size: 14px; }
+.plan ul li { margin: 6px 0; }
 .qr { display: block; margin: 14px 0; border: 1px solid var(--border); border-radius: 8px; }
 .muted { color: var(--dim); font-size: 13px; }
+.center { text-align: center; }
 .badge-on { color: var(--ok); font-weight: 600; }
 
 .result {

@@ -60,6 +60,7 @@ type server struct {
 	sessions   *sessionStore
 	pending    *pendingStore
 	loginGuard *loginGuard
+	billing    *billingConfig
 	tmpl       *template.Template
 }
 
@@ -100,6 +101,7 @@ func main() {
 		sessions:   newSessionStore(12 * time.Hour),
 		pending:    newPendingStore(5 * time.Minute),
 		loginGuard: newLoginGuard(5, 15*time.Minute),
+		billing:    loadBilling(),
 		tmpl:       tmpl,
 	}
 
@@ -148,6 +150,12 @@ func main() {
 	mux.HandleFunc("GET /api/v1/inbox", s.apiInbox)
 	mux.HandleFunc("GET /api/v1/messages/{id}", s.apiMsgGet)
 	mux.HandleFunc("DELETE /api/v1/messages/{id}", s.apiMsgDelete)
+
+	// Billing (Stripe)
+	mux.HandleFunc("GET /pricing", s.handlePricing)
+	mux.HandleFunc("POST /api/billing/checkout", s.handleCheckout)
+	mux.HandleFunc("POST /api/billing/webhook", s.handleWebhook)
+	mux.HandleFunc("GET /billing/success", s.handleBillingSuccess)
 
 	srv := &http.Server{
 		Addr:              cfg.addr,
