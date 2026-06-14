@@ -123,6 +123,19 @@
     </div>
 
     <div class="card">
+      <h2>Change password</h2>
+      <p class="sub">Your private key is re-encrypted under the new password. API keys keep working.</p>
+      <form id="pwform">
+        <label for="curpw">Current password</label>
+        <input id="curpw" name="current_password" type="password" autocomplete="current-password" required>
+        <label for="newpw">New password</label>
+        <input id="newpw" name="new_password" type="password" autocomplete="new-password" placeholder="at least 12 chars, not breached" required>
+        <button class="primary" type="submit">Change password</button>
+      </form>
+      <div class="status" id="pw-status"></div>
+    </div>
+
+    <div class="card">
       <h2>Recent activity</h2>
       {{if .Activity}}
       <table>

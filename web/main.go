@@ -134,6 +134,7 @@ func main() {
 	mux.HandleFunc("POST /api/login", s.handleLogin)
 	mux.HandleFunc("POST /api/login/totp", s.handleLoginTOTP)
 	mux.HandleFunc("POST /api/logout", s.handleLogout)
+	mux.HandleFunc("POST /api/account/password", s.handleChangePassword)
 	mux.HandleFunc("POST /api/2fa/setup", s.handle2FASetup)
 	mux.HandleFunc("POST /api/2fa/enable", s.handle2FAEnable)
 	mux.HandleFunc("POST /api/2fa/disable", s.handle2FADisable)

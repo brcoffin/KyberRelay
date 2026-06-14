@@ -279,6 +279,57 @@ func (a *accounts) authenticate(username, password string) (*User, *mlkem.Decaps
 	return u, dk, nil
 }
 
+// changePassword verifies the current password, then re-derives the auth hash
+// and re-wraps the private key under the new password. API keys are unaffected
+// (they wrap the key under their own secret), and the session stays valid (the
+// key itself doesn't change, only its password-wrapping).
+func (a *accounts) changePassword(username, oldPassword, newPassword string) error {
+	_, dk, err := a.authenticate(username, oldPassword)
+	if err != nil {
+		return errBadLogin // current password incorrect (or 2FA-wrapped load failed)
+	}
+	if len(newPassword) < 12 {
+		return errors.New("new password must be at least 12 characters")
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	u, err := a.load(username)
+	if err != nil {
+		return err
+	}
+	seed := dk.Bytes()
+
+	saltAuth := make([]byte, 16)
+	if _, err := rand.Read(saltAuth); err != nil {
+		return err
+	}
+	pwHash, err := deriveKDFKey(kdfArgon2id, newPassword, saltAuth)
+	if err != nil {
+		return err
+	}
+	saltWrap := make([]byte, 16)
+	if _, err := rand.Read(saltWrap); err != nil {
+		return err
+	}
+	wrapKey, err := deriveKDFKey(kdfArgon2id, newPassword, saltWrap)
+	if err != nil {
+		return err
+	}
+	nonce, wrapped, err := aesWrap(wrapKey, seed)
+	if err != nil {
+		return err
+	}
+
+	u.SaltAuth = saltAuth
+	u.PwHash = pwHash
+	u.SaltWrap = saltWrap
+	u.WrapNonce = nonce
+	u.WrappedKey = wrapped
+	u.KDF = kdfArgon2id
+	return a.save(u)
+}
+
 // --- message (inbox) store ---
 
 type Message struct {

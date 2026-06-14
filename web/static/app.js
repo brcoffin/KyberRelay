@@ -68,6 +68,19 @@ if (tfaRegen) {
 const tfaDone = document.getElementById('tfa-done');
 if (tfaDone) { tfaDone.addEventListener('click', () => location.reload()); }
 
+// Change password
+const pwform = document.getElementById('pwform');
+if (pwform) {
+  const pwStatus = document.getElementById('pw-status');
+  pwform.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    pwStatus.textContent = 'Updating…'; pwStatus.className = 'status';
+    const res = await fetch('/api/account/password', { method: 'POST', body: new FormData(pwform) });
+    if (res.ok) { pwStatus.textContent = 'Password changed.'; pwStatus.className = 'status ok'; pwform.reset(); }
+    else { pwStatus.textContent = await res.text(); pwStatus.className = 'status err'; }
+  });
+}
+
 const tfaDisable = document.getElementById('tfa-disable');
 if (tfaDisable) {
   tfaDisable.addEventListener('submit', async (e) => {

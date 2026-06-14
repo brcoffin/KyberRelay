@@ -169,6 +169,30 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+// POST /api/account/password — change password (requires current password).
+func (s *server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	sess, ok := s.requireSession(w, r)
+	if !ok {
+		return
+	}
+	newp := r.FormValue("new_password")
+	if breached, err := passwordBreached(newp); err == nil && breached {
+		jsonError(w, http.StatusBadRequest, "That password has appeared in a data breach — choose another.")
+		return
+	}
+	err := s.accounts.changePassword(sess.username, r.FormValue("current_password"), newp)
+	if err == errBadLogin {
+		jsonError(w, http.StatusBadRequest, "current password is incorrect")
+		return
+	}
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.audit.log("password_changed", sess.username, clientIP(r), "")
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 // POST /api/login/totp — second login step: verify the authenticator code.
 func (s *server) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 	pl, ok := s.pending.get(r.FormValue("pending"))
