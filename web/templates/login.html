@@ -13,11 +13,17 @@
     <div class="card">
       <h1>Log in</h1>
       <form id="f">
-        <label for="username">Username</label>
-        <input id="username" name="username" autocomplete="username" required>
-        <label for="password">Password</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" required>
-        <button type="submit">Log in</button>
+        <div id="creds">
+          <label for="username">Username</label>
+          <input id="username" name="username" autocomplete="username" required>
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <div id="totpstep" class="hidden">
+          <label for="code">Authenticator code</label>
+          <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code">
+        </div>
+        <button type="submit" id="loginbtn">Log in</button>
       </form>
       <div class="err" id="err"></div>
       <div class="alt">No account? <a href="/register">Create one</a></div>

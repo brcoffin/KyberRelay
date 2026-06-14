@@ -67,6 +67,24 @@ type User struct {
 	KDF        string `json:"kdf"`         // "argon2id" (new) or "pbkdf2"/"" (legacy)
 	Plan       string `json:"plan"`        // "" / "free" / "pro"
 	Created    int64  `json:"created"`
+
+	// TOTP 2FA. Secret is wrapped under totpKey(decapsulation key).
+	TOTPEnabled bool   `json:"totp_enabled,omitempty"`
+	TOTPNonce   []byte `json:"totp_nonce,omitempty"`
+	TOTPSecret  []byte `json:"totp_secret,omitempty"`
+}
+
+// save atomically writes a user record (used for profile updates like 2FA).
+func (a *accounts) save(u *User) error {
+	b, err := json.Marshal(u)
+	if err != nil {
+		return err
+	}
+	tmp := a.path(u.Username) + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, a.path(u.Username))
 }
 
 type accounts struct {

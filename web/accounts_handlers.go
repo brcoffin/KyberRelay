@@ -137,17 +137,56 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusTooManyRequests, "too many attempts — try again in a few minutes")
 		return
 	}
-	_, dk, err := s.accounts.authenticate(username, password)
+	u, dk, err := s.accounts.authenticate(username, password)
 	if err != nil {
 		s.loginGuard.fail("u:" + username)
 		s.loginGuard.fail("ip:" + ip)
 		jsonError(w, http.StatusUnauthorized, "invalid username or password")
 		return
 	}
-	s.loginGuard.reset("u:" + username)
+	s.loginGuard.reset("u:" + username) // password correct
+
+	// If 2FA is on, stop here and require a TOTP code (second step).
+	if u.TOTPEnabled {
+		secret, err := aesUnwrap(totpKey(dk), u.TOTPNonce, u.TOTPSecret)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "could not load 2FA")
+			return
+		}
+		token, err := s.pending.create(&pendingLogin{username: username, dk: dk, totpSecret: secret})
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"totp_required": true, "pending": token})
+		return
+	}
+
 	s.startSession(w, username, dk)
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"ok":true}`))
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// POST /api/login/totp — second login step: verify the authenticator code.
+func (s *server) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
+	pl, ok := s.pending.get(r.FormValue("pending"))
+	if !ok {
+		jsonError(w, http.StatusUnauthorized, "login expired — start again")
+		return
+	}
+	guardKey := "totp:" + pl.username
+	if s.loginGuard.locked(guardKey) {
+		jsonError(w, http.StatusTooManyRequests, "too many attempts — try again later")
+		return
+	}
+	if !totpVerify(pl.totpSecret, r.FormValue("code")) {
+		s.loginGuard.fail(guardKey)
+		jsonError(w, http.StatusUnauthorized, "invalid code")
+		return
+	}
+	s.loginGuard.reset(guardKey)
+	s.pending.del(r.FormValue("pending"))
+	s.startSession(w, pl.username, pl.dk)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (s *server) startSession(w http.ResponseWriter, username string, dk *mlkem.DecapsulationKey768) {
@@ -215,17 +254,20 @@ func (s *server) handleApp(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	plan := planFor("free")
+	totp := false
 	if u, err := s.accounts.load(sess.username); err == nil {
 		plan = planFor(u.Plan)
+		totp = u.TOTPEnabled
 	}
 	keys := s.apikeys.list(sess.username)
 	s.render(w, "app.html", map[string]any{
-		"User":       sess.username,
-		"Inbox":      rows,
-		"Keys":       keys,
-		"Plan":       plan.Label,
-		"MaxMB":      plan.MaxFileBytes / (1 << 20),
-		"RetentionH": int(plan.TTL.Hours()),
+		"User":        sess.username,
+		"Inbox":       rows,
+		"Keys":        keys,
+		"Plan":        plan.Label,
+		"MaxMB":       plan.MaxFileBytes / (1 << 20),
+		"RetentionH":  int(plan.TTL.Hours()),
+		"TOTPEnabled": totp,
 	})
 }
 

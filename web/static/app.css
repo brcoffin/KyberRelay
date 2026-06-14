@@ -103,6 +103,10 @@ button:disabled { opacity: .6; cursor: default; }
 .inline-form { margin: 0; }
 .mt14 { margin-top: 14px; }
 .token { word-break: break-all; color: var(--accent-light); font-size: 13px; }
+.hidden { display: none; }
+.qr { display: block; margin: 14px 0; border: 1px solid var(--border); border-radius: 8px; }
+.muted { color: var(--dim); font-size: 13px; }
+.badge-on { color: var(--ok); font-weight: 600; }
 
 .result {
   margin-top: 18px; padding: 14px;

@@ -58,6 +58,7 @@ type server struct {
 	msgs     *messages
 	apikeys    *apikeyStore
 	sessions   *sessionStore
+	pending    *pendingStore
 	loginGuard *loginGuard
 	tmpl       *template.Template
 }
@@ -97,6 +98,7 @@ func main() {
 	s := &server{
 		cfg: cfg, store: st, accounts: acct, msgs: msgs, apikeys: keys,
 		sessions:   newSessionStore(12 * time.Hour),
+		pending:    newPendingStore(5 * time.Minute),
 		loginGuard: newLoginGuard(5, 15*time.Minute),
 		tmpl:       tmpl,
 	}
@@ -126,7 +128,11 @@ func main() {
 	mux.HandleFunc("POST /api/register", s.handleRegister)
 	mux.HandleFunc("GET /login", s.handleLoginPage)
 	mux.HandleFunc("POST /api/login", s.handleLogin)
+	mux.HandleFunc("POST /api/login/totp", s.handleLoginTOTP)
 	mux.HandleFunc("POST /api/logout", s.handleLogout)
+	mux.HandleFunc("POST /api/2fa/setup", s.handle2FASetup)
+	mux.HandleFunc("POST /api/2fa/enable", s.handle2FAEnable)
+	mux.HandleFunc("POST /api/2fa/disable", s.handle2FADisable)
 	mux.HandleFunc("GET /app", s.handleApp)
 	mux.HandleFunc("POST /api/send", s.handleSend)
 	mux.HandleFunc("GET /api/msg/{id}", s.handleMsgDownload)

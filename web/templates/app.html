@@ -75,6 +75,31 @@
       </table>
       {{end}}
     </div>
+
+    <div class="card">
+      <h2>Two-factor authentication</h2>
+      {{if .TOTPEnabled}}
+      <p class="sub"><span class="badge-on">On.</span> You'll be asked for an authenticator code at login.</p>
+      <form id="tfa-disable">
+        <label for="dcode">Authenticator code</label>
+        <input id="dcode" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" required>
+        <button class="primary" type="submit">Disable 2FA</button>
+      </form>
+      {{else}}
+      <p class="sub">Add an authenticator app (Google Authenticator, Authy, 1Password…) as a second factor at login.</p>
+      <button class="primary" id="tfa-setup">Enable 2FA</button>
+      <div id="tfa-enroll" class="hidden">
+        <img id="tfa-qr" class="qr" alt="Scan with your authenticator app">
+        <p class="muted">Can't scan? Enter this key: <code id="tfa-secret" class="token"></code></p>
+        <form id="tfa-enable">
+          <label for="ecode">Enter the 6-digit code to confirm</label>
+          <input id="ecode" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" required>
+          <button class="primary" type="submit">Verify &amp; enable</button>
+        </form>
+      </div>
+      {{end}}
+      <div class="status" id="tfa-status"></div>
+    </div>
   </main>
 <script src="/static/app.js"></script>
 </body>

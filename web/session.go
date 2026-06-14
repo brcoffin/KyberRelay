@@ -84,6 +84,58 @@ func setSessionCookie(w http.ResponseWriter, token string, ttl time.Duration, se
 	})
 }
 
+// --- pending login (password verified, awaiting TOTP) ---
+
+type pendingLogin struct {
+	username   string
+	dk         *mlkem.DecapsulationKey768
+	totpSecret []byte
+	expires    time.Time
+}
+
+type pendingStore struct {
+	mu  sync.Mutex
+	m   map[string]*pendingLogin
+	ttl time.Duration
+}
+
+func newPendingStore(ttl time.Duration) *pendingStore {
+	return &pendingStore{m: make(map[string]*pendingLogin), ttl: ttl}
+}
+
+func (p *pendingStore) create(pl *pendingLogin) (string, error) {
+	var b [32]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	token := base64.RawURLEncoding.EncodeToString(b[:])
+	pl.expires = time.Now().Add(p.ttl)
+	p.mu.Lock()
+	p.m[token] = pl
+	p.mu.Unlock()
+	return token, nil
+}
+
+func (p *pendingStore) get(token string) (*pendingLogin, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	pl, ok := p.m[token]
+	if !ok {
+		return nil, false
+	}
+	if time.Now().After(pl.expires) {
+		delete(p.m, token)
+		return nil, false
+	}
+	return pl, true
+}
+
+func (p *pendingStore) del(token string) {
+	p.mu.Lock()
+	delete(p.m, token)
+	p.mu.Unlock()
+}
+
 func clearSessionCookie(w http.ResponseWriter, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookie, Value: "", Path: "/",
