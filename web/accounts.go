@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/mlkem"
@@ -10,6 +11,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -397,9 +399,10 @@ type Message struct {
 	ID        string `json:"id"`
 	Sender    string `json:"sender"`
 	Recipient string `json:"recipient"`
-	KemCt     []byte `json:"kem_ct"` // ML-KEM ciphertext (encapsulated to recipient)
-	Nonce     []byte `json:"nonce"`  // AES-GCM nonce
-	Size      int64  `json:"size"`   // approx plaintext size, for display
+	KemCt     []byte `json:"kem_ct"`           // ML-KEM ciphertext (encapsulated to recipient)
+	Nonce     []byte `json:"nonce,omitempty"`  // AES-GCM nonce (legacy single-shot blobs only)
+	Stream    bool   `json:"stream,omitempty"` // true: chunked-stream blob (see stream.go)
+	Size      int64  `json:"size"`             // approx plaintext size, for display
 	Created   int64  `json:"created"`
 	Expires   int64  `json:"expires"`
 }
@@ -423,13 +426,38 @@ func (m *messages) blobPath(user, id string) string {
 	return filepath.Join(m.userDir(user), filepath.Base(id)+".blob")
 }
 
-func (m *messages) put(msg Message, ct []byte) error {
-	if err := os.MkdirAll(m.userDir(msg.Recipient), 0o700); err != nil {
+// writeBlob streams an encrypted blob to <recipient>/<id>.blob via seal, writing
+// to a temp file first and renaming on success so a partial write never lands.
+func (m *messages) writeBlob(recipient, id string, seal func(io.Writer) error) error {
+	if err := os.MkdirAll(m.userDir(recipient), 0o700); err != nil {
 		return err
 	}
-	if err := os.WriteFile(m.blobPath(msg.Recipient, msg.ID), ct, 0o600); err != nil {
+	blob := m.blobPath(recipient, id)
+	tmp := blob + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
 		return err
 	}
+	bw := bufio.NewWriterSize(f, streamChunk)
+	if err := seal(bw); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := bw.Flush(); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, blob)
+}
+
+// writeMeta persists a message's metadata sidecar.
+func (m *messages) writeMeta(msg Message) error {
 	b, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -465,20 +493,20 @@ func (m *messages) list(user string) []Message {
 	return out
 }
 
-func (m *messages) get(user, id string) (Message, []byte, error) {
+// meta reads a message's metadata sidecar (no blob).
+func (m *messages) meta(user, id string) (Message, error) {
 	var msg Message
 	b, err := os.ReadFile(m.metaPath(user, id))
 	if err != nil {
-		return msg, nil, err
+		return msg, err
 	}
-	if err := json.Unmarshal(b, &msg); err != nil {
-		return msg, nil, err
-	}
-	ct, err := os.ReadFile(m.blobPath(user, id))
-	if err != nil {
-		return msg, nil, err
-	}
-	return msg, ct, nil
+	err = json.Unmarshal(b, &msg)
+	return msg, err
+}
+
+// openBlob opens the ciphertext blob for streaming.
+func (m *messages) openBlob(user, id string) (*os.File, error) {
+	return os.Open(m.blobPath(user, id))
 }
 
 func (m *messages) delete(user, id string) {
@@ -498,32 +526,7 @@ func (m *messages) sweep() {
 	}
 }
 
-// --- key-based payload sealing (filename sealed inside, like the passphrase path) ---
-
-func sealWithKey(key []byte, filename string, data []byte) (nonce, ct []byte, err error) {
-	payload, err := packPayload(filename, data)
-	if err != nil {
-		return nil, nil, err
-	}
-	compressed, err := deflateBytes(payload)
-	if err != nil {
-		return nil, nil, err
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, nil, err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, nil, err
-	}
-	nonce = make([]byte, gcm.NonceSize())
-	if _, err = rand.Read(nonce); err != nil {
-		return nil, nil, err
-	}
-	ct = gcm.Seal(nil, nonce, compressed, nil)
-	return nonce, ct, nil
-}
+// --- key-based payload opening (legacy single-shot blobs; new blobs stream) ---
 
 func openWithKey(key, nonce, ct []byte) (filename string, data []byte, err error) {
 	block, err := aes.NewCipher(key)

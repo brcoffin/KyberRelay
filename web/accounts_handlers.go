@@ -1,9 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"compress/flate"
 	"crypto/mlkem"
+	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"time"
 )
@@ -22,25 +28,6 @@ func jsonError(w http.ResponseWriter, code int, msg string) {
 	http.Error(w, msg, code)
 }
 
-// readUpload reads the "file" part of a multipart request fully into memory.
-func readUpload(r *http.Request) (filename string, data []byte, err error) {
-	file, hdr, err := r.FormFile("file")
-	if err != nil {
-		return "", nil, err
-	}
-	defer file.Close()
-	data = make([]byte, 0, hdr.Size)
-	buf := make([]byte, 64*1024)
-	for {
-		n, rerr := file.Read(buf)
-		data = append(data, buf[:n]...)
-		if rerr != nil {
-			break
-		}
-	}
-	return hdr.Filename, data, nil
-}
-
 // uploadLimit is the largest file the sender's plan permits, used to bound the
 // request body (and thus memory) before reading.
 func (s *server) uploadLimit(username string) int64 {
@@ -51,18 +38,16 @@ func (s *server) uploadLimit(username string) int64 {
 	return plan.MaxFileBytes
 }
 
-// encryptAndStore encapsulates to the recipient's public key, seals the file,
-// and drops it in their inbox. Shared by the browser and API send handlers.
-func (s *server) encryptAndStore(sender, recipient, filename string, data []byte) (string, error) {
+// encryptAndStoreStream encapsulates to the recipient's public key and streams
+// the upload through compression + chunked encryption straight to the recipient's
+// inbox, so the file is never held whole in memory. Shared by the browser and API
+// send handlers.
+func (s *server) encryptAndStoreStream(sender, recipient, filename string, src io.Reader) (string, error) {
 	// The sender's plan governs the size limit and retention.
 	plan := planFor("free")
 	if su, err := s.accounts.load(sender); err == nil {
 		plan = planFor(su.Plan)
 	}
-	if int64(len(data)) > plan.MaxFileBytes {
-		return "", errTooLarge
-	}
-
 	ru, err := s.accounts.load(recipient)
 	if err != nil {
 		return "", errNoSuchUser
@@ -72,37 +57,124 @@ func (s *server) encryptAndStore(sender, recipient, filename string, data []byte
 		return "", err
 	}
 	sharedKey, kemCt := ek.Encapsulate()
-	nonce, ct, err := sealWithKey(sharedKey, filename, data)
-	if err != nil {
-		return "", err
-	}
 	id, err := newID()
 	if err != nil {
 		return "", err
 	}
+
+	// Logical plaintext stream = uint16(len(filename)) + filename + file bytes,
+	// deflated, then chunk-encrypted (see stream.go / readFilename).
+	var size int64
+	seal := func(dst io.Writer) error {
+		sw, err := newSealWriter(sharedKey, dst)
+		if err != nil {
+			return err
+		}
+		zw, err := flate.NewWriter(sw, flate.DefaultCompression)
+		if err != nil {
+			return err
+		}
+		var nl [2]byte
+		binary.LittleEndian.PutUint16(nl[:], uint16(len(filename)))
+		if _, err := zw.Write(nl[:]); err != nil {
+			return err
+		}
+		if _, err := zw.Write([]byte(filename)); err != nil {
+			return err
+		}
+		cr := &countingReader{r: src}
+		if _, err := io.Copy(zw, cr); err != nil {
+			return err
+		}
+		if err := zw.Close(); err != nil {
+			return err
+		}
+		size = cr.n
+		return sw.Close()
+	}
+	if err := s.msgs.writeBlob(recipient, id, seal); err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			return "", errTooLarge
+		}
+		return "", err
+	}
+	if size > plan.MaxFileBytes {
+		s.msgs.delete(recipient, id)
+		return "", errTooLarge
+	}
+
 	msg := Message{
 		ID: id, Sender: sender, Recipient: recipient,
-		KemCt: kemCt, Nonce: nonce, Size: int64(len(data)),
+		KemCt: kemCt, Stream: true, Size: size,
 		Created: time.Now().Unix(),
 		Expires: time.Now().Add(plan.TTL).Unix(),
 	}
-	if err := s.msgs.put(msg, ct); err != nil {
+	if err := s.msgs.writeMeta(msg); err != nil {
+		s.msgs.delete(recipient, id)
 		return "", err
 	}
 	return id, nil
 }
 
-// decryptMessage fetches and decrypts one inbox message with the given key.
-func (s *server) decryptMessage(dk *mlkem.DecapsulationKey768, username, id string) (string, []byte, error) {
-	msg, ct, err := s.msgs.get(username, id)
+// setDownloadHeaders sets the attachment headers for a decrypted file.
+func setDownloadHeaders(w http.ResponseWriter, filename string) {
+	if filename == "" {
+		filename = "download.bin"
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+}
+
+// writeDecrypted streams one inbox message, decrypted, to w. It returns a
+// non-nil error ONLY when nothing has been written yet (so the caller can send a
+// 404 in its own format); once the body starts, mid-stream errors are logged and
+// nil is returned. Handles both the chunked-stream format and legacy blobs.
+func (s *server) writeDecrypted(w http.ResponseWriter, dk *mlkem.DecapsulationKey768, username, id string) error {
+	msg, err := s.msgs.meta(username, id)
 	if err != nil {
-		return "", nil, err
+		return err
 	}
 	sharedKey, err := dk.Decapsulate(msg.KemCt)
 	if err != nil {
-		return "", nil, err
+		return err
 	}
-	return openWithKey(sharedKey, msg.Nonce, ct)
+	f, err := s.msgs.openBlob(username, id)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	var filename string
+	var body io.Reader
+	if msg.Stream {
+		sr, err := newStreamReader(sharedKey, f)
+		if err != nil {
+			return err
+		}
+		zr := flate.NewReader(sr)
+		defer zr.Close()
+		if filename, err = readFilename(zr); err != nil {
+			return err
+		}
+		body = zr
+	} else {
+		ct, err := io.ReadAll(f)
+		if err != nil {
+			return err
+		}
+		fn, data, err := openWithKey(sharedKey, msg.Nonce, ct)
+		if err != nil {
+			return err
+		}
+		filename, body = fn, bytes.NewReader(data)
+	}
+
+	setDownloadHeaders(w, filename)
+	if _, err := io.Copy(w, body); err != nil {
+		log.Printf("web: stream message %s: %v", id, err)
+	}
+	return nil
 }
 
 // GET /register, GET /login — pages.
@@ -360,12 +432,12 @@ func (s *server) handleSend(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// Bound concurrent in-memory uploads so large transfers can't exhaust RAM.
+	// Bound concurrent uploads so large transfers can't exhaust resources.
 	s.uploadSem <- struct{}{}
 	defer func() { <-s.uploadSem }()
 
 	r.Body = http.MaxBytesReader(w, r.Body, s.uploadLimit(sess.username)+(1<<20))
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		jsonError(w, http.StatusRequestEntityTooLarge, "upload too large")
 		return
 	}
@@ -376,12 +448,13 @@ func (s *server) handleSend(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	recipient := r.FormValue("recipient")
-	filename, data, err := readUpload(r)
+	file, hdr, err := r.FormFile("file")
 	if err != nil {
 		jsonError(w, http.StatusBadRequest, "no file provided")
 		return
 	}
-	if _, err := s.encryptAndStore(sess.username, recipient, filename, data); err != nil {
+	defer file.Close()
+	if _, err := s.encryptAndStoreStream(sess.username, recipient, hdr.Filename, file); err != nil {
 		switch err {
 		case errNoSuchUser:
 			jsonError(w, http.StatusNotFound, "no such recipient")
@@ -408,18 +481,11 @@ func (s *server) handleMsgDownload(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	filename, data, err := s.decryptMessage(sess.dk, sess.username, id)
-	if err != nil {
+	if err := s.writeDecrypted(w, sess.dk, sess.username, id); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	if filename == "" {
-		filename = "download.bin"
-	}
 	s.audit.log("downloaded", sess.username, clientIP(r), id)
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	_, _ = w.Write(data)
 }
 
 // POST /api/msg/{id}/delete — remove a message from the inbox. Requires login.

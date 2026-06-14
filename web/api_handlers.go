@@ -4,7 +4,6 @@ import (
 	"crypto/mlkem"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -48,7 +47,7 @@ func (s *server) apiSend(w http.ResponseWriter, r *http.Request) {
 	defer func() { <-s.uploadSem }()
 
 	r.Body = http.MaxBytesReader(w, r.Body, s.uploadLimit(username)+(1<<20))
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "upload too large"})
 		return
 	}
@@ -58,12 +57,13 @@ func (s *server) apiSend(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	recipient := r.FormValue("recipient")
-	filename, data, err := readUpload(r)
+	file, hdr, err := r.FormFile("file")
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no file provided"})
 		return
 	}
-	id, err := s.encryptAndStore(username, recipient, filename, data)
+	defer file.Close()
+	id, err := s.encryptAndStoreStream(username, recipient, hdr.Filename, file)
 	if err != nil {
 		switch err {
 		case errNoSuchUser:
@@ -117,18 +117,11 @@ func (s *server) apiMsgGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
-	filename, data, err := s.decryptMessage(dk, username, id)
-	if err != nil {
+	if err := s.writeDecrypted(w, dk, username, id); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
-	if filename == "" {
-		filename = "download.bin"
-	}
 	s.audit.log("downloaded", username, clientIP(r), id+" (api)")
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	_, _ = w.Write(data)
 }
 
 // DELETE /api/v1/messages/{id} — Bearer.
