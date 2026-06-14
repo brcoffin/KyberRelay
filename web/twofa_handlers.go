@@ -71,12 +71,13 @@ func (s *server) handle2FAEnable(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err // 500: secret unreadable
 		}
-		valid, counter := totpVerify(secret, code)
+		valid, _ := totpVerify(secret, code)
 		if !valid {
 			return err2FABadCode
 		}
 		u.TOTPEnabled = true
-		u.TOTPLastUsed = counter // the enrollment code can't be replayed at login
+		// TOTPLastUsed stays 0: replay tracking begins at first login, so a user
+		// who enables 2FA can still log in within the same 30s window.
 		var hashes []string
 		display, hashes = newRecoveryCodes(10)
 		u.RecoveryCodes = hashes
