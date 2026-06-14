@@ -68,19 +68,23 @@ func (s *server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	switch ev.Type {
 	case "checkout.session.completed":
 		obj := ev.Data.Object
-		if u, err := s.accounts.load(obj.ClientReferenceID); err == nil {
+		if err := s.accounts.update(obj.ClientReferenceID, func(u *User) error {
 			u.Plan = "pro"
 			u.StripeCustomerID = obj.Customer
 			u.StripeSubID = obj.Subscription
-			_ = s.accounts.save(u)
-			s.audit.log("plan_upgraded", u.Username, "stripe", "pro")
+			return nil
+		}); err == nil {
+			s.audit.log("plan_upgraded", obj.ClientReferenceID, "stripe", "pro")
 		}
 	case "customer.subscription.deleted":
 		if u, ok := s.accounts.findByStripeCustomer(ev.Data.Object.Customer); ok {
-			u.Plan = "free"
-			u.StripeSubID = ""
-			_ = s.accounts.save(u)
-			s.audit.log("plan_downgraded", u.Username, "stripe", "free")
+			if err := s.accounts.update(u.Username, func(u *User) error {
+				u.Plan = "free"
+				u.StripeSubID = ""
+				return nil
+			}); err == nil {
+				s.audit.log("plan_downgraded", u.Username, "stripe", "free")
+			}
 		}
 	}
 	w.WriteHeader(http.StatusOK)

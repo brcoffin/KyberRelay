@@ -1,8 +1,10 @@
 # Encrypted backups (web service)
 
 Backs up the web data dir — accounts (password-wrapped keys), inboxes, API keys,
-and the audit log — as a single **AES-256 encrypted tarball**, with local
-rotation, a daily systemd timer, and optional off-box upload.
+and the audit log — as a single **authenticated AES-256 (GnuPG) encrypted
+tarball**, with local rotation, a daily systemd timer, and optional off-box
+upload. GnuPG's encryption is integrity-protected, so a tampered backup fails to
+decrypt rather than silently restoring corrupted data.
 
 > The relay's data is intentionally **not** backed up: blobs are one-time /
 > TTL-expiring and ephemeral.
@@ -11,6 +13,7 @@ rotation, a daily systemd timer, and optional off-box upload.
 
 ```sh
 # from the repo's web/deploy/backup directory:
+apt install -y gnupg                                  # required for encrypt/decrypt
 install -m 0755 backup.sh  /usr/local/bin/kyber-web-backup
 install -m 0755 restore.sh /usr/local/bin/kyber-web-restore
 install -m 0644 kyber-web-backup.service /etc/systemd/system/
@@ -44,7 +47,7 @@ manager) that does *not* live on the droplet.
 ## Restore
 
 ```sh
-kyber-web-restore /var/backups/kyber-web/kyber-web-YYYYmmdd-HHMMSS.tar.gz.enc
+kyber-web-restore /var/backups/kyber-web/kyber-web-YYYYmmdd-HHMMSS.tar.gz.gpg
 # review /tmp/kyber-restore/data, then follow the printed command to go live
 ```
 

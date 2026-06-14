@@ -51,19 +51,21 @@ func totpCodeAt(secret []byte, counter int64) string {
 	return fmt.Sprintf("%0*d", totpDigits, v%mod)
 }
 
-// totpVerify checks a code against the current 30s window ±1 (clock skew).
-func totpVerify(secret []byte, code string) bool {
+// totpVerify checks a code against the current 30s window ±1 (clock skew). On a
+// match it returns the accepted time-step counter so callers can record it and
+// reject replays of the same code.
+func totpVerify(secret []byte, code string) (bool, int64) {
 	code = strings.TrimSpace(code)
 	if len(code) != totpDigits {
-		return false
+		return false, 0
 	}
 	c := time.Now().Unix() / totpPeriod
 	for _, d := range []int64{-1, 0, 1} {
 		if subtle.ConstantTimeCompare([]byte(totpCodeAt(secret, c+d)), []byte(code)) == 1 {
-			return true
+			return true, c + d
 		}
 	}
-	return false
+	return false, 0
 }
 
 func totpSecretB32(secret []byte) string { return totpBase32.EncodeToString(secret) }

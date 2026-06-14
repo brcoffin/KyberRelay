@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -30,20 +31,63 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// clientIP returns the real client IP, honoring the proxy's X-Forwarded-For
-// (Caddy sets it; RemoteAddr would otherwise be 127.0.0.1).
+// clientIP returns the real client IP. X-Forwarded-For is a comma-separated
+// chain in which the trusted reverse proxy (Caddy) appends the immediate client
+// as the LAST entry; the leftmost entries are client-supplied and spoofable, so
+// taking the rightmost prevents an attacker from forging the IP used for
+// rate-limiting and audit logging.
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i >= 0 {
-			return strings.TrimSpace(xff[:i])
-		}
-		return strings.TrimSpace(xff)
+		parts := strings.Split(xff, ",")
+		return strings.TrimSpace(parts[len(parts)-1])
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// --- CSRF: cross-origin guard for cookie-authenticated, state-changing requests ---
+
+// csrfGuard rejects cross-origin state-changing requests. The cookie-driven UI
+// is always same-origin; the Bearer API (Authorization header — not sent
+// cross-site automatically) and the signature-verified Stripe webhook are not
+// cookie-authenticated, so they are exempt.
+func csrfGuard(allowedHost string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+			if r.Header.Get("Authorization") == "" &&
+				r.URL.Path != "/api/billing/webhook" &&
+				!sameOrigin(r, allowedHost) {
+				http.Error(w, "cross-origin request blocked", http.StatusForbidden)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// sameOrigin reports whether the request's Origin (or Referer, as a fallback)
+// host matches the service's own host. A missing or unparseable header fails
+// closed — browsers send at least one of these on state-changing requests.
+func sameOrigin(r *http.Request, allowedHost string) bool {
+	o := r.Header.Get("Origin")
+	if o == "" {
+		o = r.Header.Get("Referer")
+	}
+	if o == "" {
+		return false
+	}
+	u, err := url.Parse(o)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	if strings.EqualFold(u.Host, r.Host) {
+		return true
+	}
+	return allowedHost != "" && strings.EqualFold(u.Host, allowedHost)
 }
 
 // --- login brute-force guard ---

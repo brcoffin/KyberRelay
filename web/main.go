@@ -17,6 +17,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -34,6 +35,7 @@ type config struct {
 	addr       string
 	dataDir    string
 	baseURL    string
+	host       string // baseURL's host, for the same-origin CSRF check
 	maxBytes   int64
 	defaultTTL time.Duration
 	secure     bool // mark session cookies Secure (true when served over HTTPS)
@@ -41,10 +43,15 @@ type config struct {
 
 func loadConfig() config {
 	baseURL := env("WEB_BASE_URL", "http://127.0.0.1:8090")
+	host := ""
+	if u, err := url.Parse(baseURL); err == nil {
+		host = u.Host
+	}
 	return config{
 		addr:       env("WEB_ADDR", "127.0.0.1:8090"),
 		dataDir:    env("WEB_DATA_DIR", "./web-data"),
 		baseURL:    baseURL,
+		host:       host,
 		maxBytes:   envInt64("WEB_MAX_BYTES", 100<<20), // 100 MiB
 		defaultTTL: envDuration("WEB_TTL", 24*time.Hour),
 		secure:     strings.HasPrefix(baseURL, "https://"),
@@ -60,6 +67,8 @@ type server struct {
 	sessions   *sessionStore
 	pending    *pendingStore
 	loginGuard *loginGuard
+	regGuard   *loginGuard // rate-limits registration and 2FA setup
+	uploadSem  chan struct{}
 	billing    *billingConfig
 	audit      *auditor
 	tmpl       *template.Template
@@ -97,11 +106,18 @@ func main() {
 		log.Fatalf("web: templates: %v", err)
 	}
 
+	maxUploads := int(envInt64("WEB_MAX_UPLOADS", 6))
+	if maxUploads < 1 {
+		maxUploads = 1
+	}
+
 	s := &server{
 		cfg: cfg, store: st, accounts: acct, msgs: msgs, apikeys: keys,
 		sessions:   newSessionStore(12 * time.Hour),
 		pending:    newPendingStore(5 * time.Minute),
 		loginGuard: newLoginGuard(5, 15*time.Minute),
+		regGuard:   newLoginGuard(20, time.Hour),
+		uploadSem:  make(chan struct{}, maxUploads),
 		billing:    loadBilling(),
 		audit:      newAuditor(cfg.dataDir),
 		tmpl:       tmpl,
@@ -163,7 +179,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              cfg.addr,
-		Handler:           securityHeaders(mux),
+		Handler:           securityHeaders(csrfGuard(cfg.host, mux)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	log.Printf("web: listening on %s (base %s), data=%s, max=%dB",

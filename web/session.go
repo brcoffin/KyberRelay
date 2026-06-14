@@ -62,6 +62,18 @@ func (s *sessionStore) destroy(token string) {
 	s.mu.Unlock()
 }
 
+// destroyUser invalidates every session belonging to a user (used on password
+// change, so a leaked/old session can't outlive the change).
+func (s *sessionStore) destroyUser(username string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for tok, sess := range s.m {
+		if sess.username == username {
+			delete(s.m, tok)
+		}
+	}
+}
+
 // current returns the session for the request, if any.
 func (s *sessionStore) current(r *http.Request) (*session, bool) {
 	c, err := r.Cookie(sessionCookie)

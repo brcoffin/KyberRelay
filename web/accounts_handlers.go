@@ -41,6 +41,16 @@ func readUpload(r *http.Request) (filename string, data []byte, err error) {
 	return hdr.Filename, data, nil
 }
 
+// uploadLimit is the largest file the sender's plan permits, used to bound the
+// request body (and thus memory) before reading.
+func (s *server) uploadLimit(username string) int64 {
+	plan := planFor("free")
+	if u, err := s.accounts.load(username); err == nil {
+		plan = planFor(u.Plan)
+	}
+	return plan.MaxFileBytes
+}
+
 // encryptAndStore encapsulates to the recipient's public key, seals the file,
 // and drops it in their inbox. Shared by the browser and API send handlers.
 func (s *server) encryptAndStore(sender, recipient, filename string, data []byte) (string, error) {
@@ -105,6 +115,13 @@ func (s *server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/register — create account, then auto-login.
 func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
+	ip := clientIP(r)
+	if s.regGuard.locked("reg:" + ip) {
+		jsonError(w, http.StatusTooManyRequests, "too many sign-ups from this address — try again later")
+		return
+	}
+	s.regGuard.fail("reg:" + ip) // count every attempt (incl. the HIBP lookup below)
+
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 	// Reject passwords found in known breaches (fail open if HIBP unreachable).
@@ -123,7 +140,7 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.startSession(w, username, dk)
-	s.audit.log("register", username, clientIP(r), "")
+	s.audit.log("register", username, ip, "")
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"ok":true}`))
 }
@@ -189,7 +206,13 @@ func (s *server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	s.audit.log("password_changed", sess.username, clientIP(r), "")
+	// A password change is the remediation for a compromised account, so cut off
+	// every previously-issued credential: revoke all API keys and invalidate all
+	// other sessions, then re-issue a fresh session so this browser stays in.
+	s.apikeys.revokeAll(sess.username)
+	s.sessions.destroyUser(sess.username)
+	s.startSession(w, sess.username, sess.dk)
+	s.audit.log("password_changed", sess.username, clientIP(r), "keys+sessions revoked")
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -207,7 +230,7 @@ func (s *server) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 	}
 	code := r.FormValue("code")
 	how := "2fa"
-	verified := totpVerify(pl.totpSecret, code)
+	verified := s.accounts.consumeTOTP(pl.username, pl.totpSecret, code)
 	if !verified && s.accounts.consumeRecovery(pl.username, code) {
 		verified = true
 		how = "recovery"
@@ -337,11 +360,20 @@ func (s *server) handleSend(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, s.cfg.maxBytes+(1<<20))
+	// Bound concurrent in-memory uploads so large transfers can't exhaust RAM.
+	s.uploadSem <- struct{}{}
+	defer func() { <-s.uploadSem }()
+
+	r.Body = http.MaxBytesReader(w, r.Body, s.uploadLimit(sess.username)+(1<<20))
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		jsonError(w, http.StatusRequestEntityTooLarge, "upload too large")
 		return
 	}
+	defer func() {
+		if r.MultipartForm != nil {
+			_ = r.MultipartForm.RemoveAll()
+		}
+	}()
 
 	recipient := r.FormValue("recipient")
 	filename, data, err := readUpload(r)

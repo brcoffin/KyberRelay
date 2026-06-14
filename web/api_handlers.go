@@ -44,11 +44,19 @@ func (s *server) apiSend(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, s.cfg.maxBytes+(1<<20))
+	s.uploadSem <- struct{}{}
+	defer func() { <-s.uploadSem }()
+
+	r.Body = http.MaxBytesReader(w, r.Body, s.uploadLimit(username)+(1<<20))
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "upload too large"})
 		return
 	}
+	defer func() {
+		if r.MultipartForm != nil {
+			_ = r.MultipartForm.RemoveAll()
+		}
+	}()
 	recipient := r.FormValue("recipient")
 	filename, data, err := readUpload(r)
 	if err != nil {

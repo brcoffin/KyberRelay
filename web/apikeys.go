@@ -249,6 +249,29 @@ func (k *apikeyStore) list(username string) []APIKeyInfo {
 	return out
 }
 
+// revokeAll deletes every API key owned by username (best-effort). Used when a
+// password change should cut off all previously-issued credentials.
+func (k *apikeyStore) revokeAll(username string) {
+	entries, err := os.ReadDir(k.dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) != ".json" {
+			continue
+		}
+		full := filepath.Join(k.dir, e.Name())
+		b, err := os.ReadFile(full)
+		if err != nil {
+			continue
+		}
+		var rec APIKey
+		if json.Unmarshal(b, &rec) == nil && rec.Username == username {
+			_ = os.Remove(full)
+		}
+	}
+}
+
 // revoke deletes a key if it belongs to username.
 func (k *apikeyStore) revoke(username, keyID string) error {
 	b, err := os.ReadFile(k.path(keyID))

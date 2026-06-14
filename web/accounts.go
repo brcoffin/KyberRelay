@@ -54,6 +54,11 @@ var (
 	errNoSuchUser = errors.New("no such user")
 	errTooLarge   = errors.New("file exceeds your plan's size limit")
 	validUsername = regexp.MustCompile(`^[a-z0-9_-]{3,32}$`)
+
+	// enumGuardSalt is a fixed salt used only to burn an equivalent KDF pass on
+	// the user-not-found path, so login timing can't distinguish a missing user
+	// from a wrong password (user enumeration).
+	enumGuardSalt = make([]byte, 16)
 )
 
 type User struct {
@@ -72,6 +77,7 @@ type User struct {
 	TOTPEnabled   bool     `json:"totp_enabled,omitempty"`
 	TOTPNonce     []byte   `json:"totp_nonce,omitempty"`
 	TOTPSecret    []byte   `json:"totp_secret,omitempty"`
+	TOTPLastUsed  int64    `json:"totp_last_used,omitempty"` // last accepted time-step (replay guard)
 	RecoveryCodes []string `json:"recovery_codes,omitempty"` // SHA-256 hashes, single-use
 
 	// Billing (Stripe).
@@ -85,19 +91,39 @@ func (a *accounts) consumeRecovery(username, code string) bool {
 	if normalizeRecovery(code) == "" {
 		return false
 	}
-	u, err := a.load(username)
-	if err != nil {
+	h := hashRecovery(code)
+	consumed := false
+	_ = a.update(username, func(u *User) error {
+		for i, rc := range u.RecoveryCodes {
+			if subtle.ConstantTimeCompare([]byte(rc), []byte(h)) == 1 {
+				u.RecoveryCodes = append(u.RecoveryCodes[:i], u.RecoveryCodes[i+1:]...)
+				consumed = true
+				return nil
+			}
+		}
+		return errNoChange // no match — don't persist
+	})
+	return consumed
+}
+
+// consumeTOTP verifies a code and, on success, records its time-step so the same
+// code can't be replayed within its ±1 window. Returns false on a bad or
+// already-used code. The check-and-record is atomic under the user's lock.
+func (a *accounts) consumeTOTP(username string, secret []byte, code string) bool {
+	ok, counter := totpVerify(secret, code)
+	if !ok {
 		return false
 	}
-	h := hashRecovery(code)
-	for i, rc := range u.RecoveryCodes {
-		if subtle.ConstantTimeCompare([]byte(rc), []byte(h)) == 1 {
-			u.RecoveryCodes = append(u.RecoveryCodes[:i], u.RecoveryCodes[i+1:]...)
-			_ = a.save(u)
-			return true
+	accepted := false
+	_ = a.update(username, func(u *User) error {
+		if counter <= u.TOTPLastUsed {
+			return errNoChange // replay of an already-accepted code
 		}
-	}
-	return false
+		u.TOTPLastUsed = counter
+		accepted = true
+		return nil
+	})
+	return accepted
 }
 
 // findByStripeCustomer scans for the user with the given Stripe customer ID.
@@ -139,15 +165,51 @@ func (a *accounts) save(u *User) error {
 }
 
 type accounts struct {
-	dir string
-	mu  sync.Mutex
+	dir   string
+	mu    sync.Mutex // guards the per-user lock table below
+	locks map[string]*sync.Mutex
 }
 
 func newAccounts(dir string) (*accounts, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	return &accounts{dir: dir}, nil
+	return &accounts{dir: dir, locks: make(map[string]*sync.Mutex)}, nil
+}
+
+// userLock returns the per-username mutex, creating it on first use. Every
+// read-modify-write sequence on a user's record must hold it, so concurrent
+// updates (e.g. enable-2FA racing change-password) can't clobber each other,
+// and a single-use recovery code can't be double-spent.
+func (a *accounts) userLock(username string) *sync.Mutex {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	l, ok := a.locks[username]
+	if !ok {
+		l = &sync.Mutex{}
+		a.locks[username] = l
+	}
+	return l
+}
+
+// errNoChange aborts an update() without persisting (e.g. a recovery-code miss
+// or a replayed TOTP code). It is internal and never surfaced to clients.
+var errNoChange = errors.New("no change")
+
+// update runs fn against the user's record under that user's lock and persists
+// the result. If fn returns an error nothing is saved and the error is returned.
+func (a *accounts) update(username string, fn func(*User) error) error {
+	l := a.userLock(username)
+	l.Lock()
+	defer l.Unlock()
+	u, err := a.load(username)
+	if err != nil {
+		return err
+	}
+	if err := fn(u); err != nil {
+		return err
+	}
+	return a.save(u)
 }
 
 func (a *accounts) path(username string) string {
@@ -174,8 +236,9 @@ func (a *accounts) register(username, password string) (*User, error) {
 		return nil, errors.New("password must be at least 12 characters")
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	l := a.userLock(username)
+	l.Lock()
+	defer l.Unlock()
 	if _, err := os.Stat(a.path(username)); err == nil {
 		return nil, errUserExists
 	}
@@ -242,6 +305,9 @@ func (a *accounts) register(username, password string) (*User, error) {
 func (a *accounts) authenticate(username, password string) (*User, *mlkem.DecapsulationKey768, error) {
 	u, err := a.load(username)
 	if err != nil {
+		// Equalize timing with the real KDF path below so a missing user is
+		// indistinguishable from a wrong password.
+		_, _ = deriveKDFKey(kdfArgon2id, password, enumGuardSalt)
 		return nil, nil, errBadLogin
 	}
 	kdf := u.KDF
@@ -291,13 +357,6 @@ func (a *accounts) changePassword(username, oldPassword, newPassword string) err
 	if len(newPassword) < 12 {
 		return errors.New("new password must be at least 12 characters")
 	}
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	u, err := a.load(username)
-	if err != nil {
-		return err
-	}
 	seed := dk.Bytes()
 
 	saltAuth := make([]byte, 16)
@@ -321,13 +380,15 @@ func (a *accounts) changePassword(username, oldPassword, newPassword string) err
 		return err
 	}
 
-	u.SaltAuth = saltAuth
-	u.PwHash = pwHash
-	u.SaltWrap = saltWrap
-	u.WrapNonce = nonce
-	u.WrappedKey = wrapped
-	u.KDF = kdfArgon2id
-	return a.save(u)
+	return a.update(username, func(u *User) error {
+		u.SaltAuth = saltAuth
+		u.PwHash = pwHash
+		u.SaltWrap = saltWrap
+		u.WrapNonce = nonce
+		u.WrappedKey = wrapped
+		u.KDF = kdfArgon2id
+		return nil
+	})
 }
 
 // --- message (inbox) store ---
