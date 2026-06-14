@@ -259,11 +259,19 @@ func (s *server) handleApp(w http.ResponseWriter, r *http.Request) {
 		plan = planFor(u.Plan)
 		totp = u.TOTPEnabled
 	}
-	keys := s.apikeys.list(sess.username)
+	type keyRow struct{ KeyID, Label, Scope, Expiry string }
+	var keyRows []keyRow
+	for _, k := range s.apikeys.list(sess.username) {
+		exp := "never"
+		if k.Expires > 0 {
+			exp = time.Unix(k.Expires, 0).UTC().Format("2006-01-02")
+		}
+		keyRows = append(keyRows, keyRow{k.KeyID, k.Label, k.Scope, exp})
+	}
 	s.render(w, "app.html", map[string]any{
 		"User":        sess.username,
 		"Inbox":       rows,
-		"Keys":        keys,
+		"Keys":        keyRows,
 		"Plan":        plan.Label,
 		"MaxMB":       plan.MaxFileBytes / (1 << 20),
 		"RetentionH":  int(plan.TTL.Hours()),

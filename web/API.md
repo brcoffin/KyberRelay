@@ -20,6 +20,19 @@ with a session cookie). Send it on every API request:
 Authorization: Bearer kc_<id>.<secret>
 ```
 
+### Scopes and expiry
+
+Each key has a **scope** and an optional **expiry**:
+
+- **`send`** — may call `POST /api/v1/send` only. Carries **no key material**, so
+  it can never decrypt your inbox even if leaked. Safest for automated senders.
+- **`decrypt`** — may send *and* list/download/delete your inbox (needs the
+  wrapped private key).
+
+Inbox/message endpoints return **403** for a send-only key, and any expired key
+returns **401**. Set scope/expiry when creating the key (form fields `scope`,
+`expires_days`).
+
 ## Endpoints
 
 ### `POST /api/v1/send`

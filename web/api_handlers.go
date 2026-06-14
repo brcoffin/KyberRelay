@@ -3,9 +3,12 @@ package main
 import (
 	"crypto/mlkem"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -14,25 +17,30 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// apiAuth resolves the Bearer API key into (username, decapsulation key).
-func (s *server) apiAuth(w http.ResponseWriter, r *http.Request) (string, *mlkem.DecapsulationKey768, bool) {
+// apiAuth resolves the Bearer API key into (username, decapsulation key, scope).
+// dk is nil for send-only keys.
+func (s *server) apiAuth(w http.ResponseWriter, r *http.Request) (string, *mlkem.DecapsulationKey768, string, bool) {
 	const p = "Bearer "
 	h := r.Header.Get("Authorization")
 	if !strings.HasPrefix(h, p) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing bearer token"})
-		return "", nil, false
+		return "", nil, "", false
 	}
-	username, dk, err := s.apikeys.authenticate(strings.TrimSpace(strings.TrimPrefix(h, p)))
+	username, scope, dk, err := s.apikeys.authenticate(strings.TrimSpace(strings.TrimPrefix(h, p)))
 	if err != nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or revoked API key"})
-		return "", nil, false
+		msg := "invalid or revoked API key"
+		if errors.Is(err, errKeyExpired) {
+			msg = "API key has expired"
+		}
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": msg})
+		return "", nil, "", false
 	}
-	return username, dk, true
+	return username, dk, scope, true
 }
 
 // POST /api/v1/send — Bearer; multipart: recipient, file -> {id}.
 func (s *server) apiSend(w http.ResponseWriter, r *http.Request) {
-	username, _, ok := s.apiAuth(w, r)
+	username, _, _, ok := s.apiAuth(w, r) // any scope may send
 	if !ok {
 		return
 	}
@@ -64,8 +72,12 @@ func (s *server) apiSend(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/v1/inbox — Bearer -> [{id, from, size, created}].
 func (s *server) apiInbox(w http.ResponseWriter, r *http.Request) {
-	username, _, ok := s.apiAuth(w, r)
+	username, _, scope, ok := s.apiAuth(w, r)
 	if !ok {
+		return
+	}
+	if scope != scopeDecrypt {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "this key is send-only"})
 		return
 	}
 	type item struct {
@@ -83,8 +95,12 @@ func (s *server) apiInbox(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/v1/messages/{id} — Bearer -> decrypted file stream.
 func (s *server) apiMsgGet(w http.ResponseWriter, r *http.Request) {
-	username, dk, ok := s.apiAuth(w, r)
+	username, dk, scope, ok := s.apiAuth(w, r)
 	if !ok {
+		return
+	}
+	if scope != scopeDecrypt || dk == nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "this key is send-only"})
 		return
 	}
 	id := r.PathValue("id")
@@ -107,8 +123,12 @@ func (s *server) apiMsgGet(w http.ResponseWriter, r *http.Request) {
 
 // DELETE /api/v1/messages/{id} — Bearer.
 func (s *server) apiMsgDelete(w http.ResponseWriter, r *http.Request) {
-	username, _, ok := s.apiAuth(w, r)
+	username, _, scope, ok := s.apiAuth(w, r)
 	if !ok {
+		return
+	}
+	if scope != scopeDecrypt {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "this key is send-only"})
 		return
 	}
 	id := r.PathValue("id")
@@ -130,12 +150,24 @@ func (s *server) handleKeyCreate(w http.ResponseWriter, r *http.Request) {
 	if label == "" {
 		label = "api key"
 	}
-	token, err := s.apikeys.create(sess.username, label, sess.dk.Bytes())
+	scope := r.FormValue("scope")
+	if scope != scopeSend {
+		scope = scopeDecrypt
+	}
+	var expires int64
+	if d, _ := strconv.Atoi(r.FormValue("expires_days")); d > 0 {
+		expires = time.Now().Add(time.Duration(d) * 24 * time.Hour).Unix()
+	}
+	var seed []byte
+	if scope == scopeDecrypt {
+		seed = sess.dk.Bytes() // send-only keys store no key material
+	}
+	token, err := s.apikeys.create(sess.username, label, scope, expires, seed)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not create key"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"token": token, "label": label})
+	writeJSON(w, http.StatusOK, map[string]string{"token": token, "label": label, "scope": scope})
 }
 
 // GET /api/keys — list the logged-in user's keys (ids/labels only).

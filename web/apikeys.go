@@ -28,9 +28,18 @@ import (
 
 const apiKeyPrefix = "kc_"
 
+// Scopes. A "send" key carries no private-key material (sending uses the
+// recipient's public key), so it can never decrypt — even if leaked. A
+// "decrypt" key can send AND read/download the owner's inbox.
+const (
+	scopeSend    = "send"
+	scopeDecrypt = "decrypt"
+)
+
 var (
 	keyIDEncoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 	errBadAPIKey  = errors.New("invalid or revoked API key")
+	errKeyExpired = errors.New("API key has expired")
 )
 
 type APIKey struct {
@@ -42,6 +51,8 @@ type APIKey struct {
 	WrapNonce   []byte `json:"wrap_nonce"`
 	WrappedSeed []byte `json:"wrapped_seed"`
 	KDF         string `json:"kdf"`
+	Scope       string `json:"scope"`             // "send" or "decrypt" ("" = legacy decrypt)
+	Expires     int64  `json:"expires,omitempty"` // 0 = never
 	Created     int64  `json:"created"`
 }
 
@@ -94,9 +105,10 @@ func aesUnwrap(key, nonce, ct []byte) ([]byte, error) {
 	return gcm.Open(nil, nonce, ct, nil)
 }
 
-// create mints a new API key for username, wrapping the given decapsulation
-// seed so the token can later decrypt. Returns the full token (shown once).
-func (k *apikeyStore) create(username, label string, seed []byte) (string, error) {
+// create mints a new API key. For "decrypt" scope it wraps the given
+// decapsulation seed so the token can decrypt; for "send" scope no key material
+// is stored at all. expires is a Unix time (0 = never). Returns the token once.
+func (k *apikeyStore) create(username, label, scope string, expires int64, seed []byte) (string, error) {
 	idBytes, err := randToken(10)
 	if err != nil {
 		return "", err
@@ -113,19 +125,24 @@ func (k *apikeyStore) create(username, label string, seed []byte) (string, error
 	if err != nil {
 		return "", err
 	}
-	wrapKey, err := deriveKDFKey(kdfArgon2id, secret, saltWrap)
-	if err != nil {
-		return "", err
-	}
-	nonce, wrapped, err := aesWrap(wrapKey, seed)
-	if err != nil {
-		return "", err
+
+	var nonce, wrapped []byte
+	if scope != scopeSend {
+		wrapKey, err := deriveKDFKey(kdfArgon2id, secret, saltWrap)
+		if err != nil {
+			return "", err
+		}
+		nonce, wrapped, err = aesWrap(wrapKey, seed)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	rec := APIKey{
 		KeyID: keyID, Username: username, Label: label,
 		SecretHash: sum[:], SaltWrap: saltWrap, WrapNonce: nonce,
-		WrappedSeed: wrapped, KDF: kdfArgon2id, Created: time.Now().Unix(),
+		WrappedSeed: wrapped, KDF: kdfArgon2id,
+		Scope: scope, Expires: expires, Created: time.Now().Unix(),
 	}
 	b, err := json.Marshal(rec)
 	if err != nil {
@@ -137,30 +154,42 @@ func (k *apikeyStore) create(username, label string, seed []byte) (string, error
 	return apiKeyPrefix + keyID + "." + secret, nil
 }
 
-// authenticate verifies a token and returns the owning username plus the
-// unwrapped decapsulation key.
-func (k *apikeyStore) authenticate(token string) (string, *mlkem.DecapsulationKey768, error) {
+// authenticate verifies a token and returns the owning username, scope, and
+// (for decrypt scope) the unwrapped decapsulation key. dk is nil for send-only.
+func (k *apikeyStore) authenticate(token string) (string, string, *mlkem.DecapsulationKey768, error) {
 	if !strings.HasPrefix(token, apiKeyPrefix) {
-		return "", nil, errBadAPIKey
+		return "", "", nil, errBadAPIKey
 	}
 	rest := strings.TrimPrefix(token, apiKeyPrefix)
 	keyID, secret, ok := strings.Cut(rest, ".")
 	if !ok || keyID == "" || secret == "" {
-		return "", nil, errBadAPIKey
+		return "", "", nil, errBadAPIKey
 	}
 
 	b, err := os.ReadFile(k.path(keyID))
 	if err != nil {
-		return "", nil, errBadAPIKey
+		return "", "", nil, errBadAPIKey
 	}
 	var rec APIKey
 	if err := json.Unmarshal(b, &rec); err != nil {
-		return "", nil, errBadAPIKey
+		return "", "", nil, errBadAPIKey
+	}
+
+	if rec.Expires > 0 && time.Now().Unix() > rec.Expires {
+		return "", "", nil, errKeyExpired
 	}
 
 	sum := sha256.Sum256([]byte(secret))
 	if subtle.ConstantTimeCompare(sum[:], rec.SecretHash) != 1 {
-		return "", nil, errBadAPIKey
+		return "", "", nil, errBadAPIKey
+	}
+
+	scope := rec.Scope
+	if scope == "" {
+		scope = scopeDecrypt // legacy keys hold a wrapped seed
+	}
+	if scope == scopeSend {
+		return rec.Username, scopeSend, nil, nil
 	}
 
 	kdf := rec.KDF
@@ -169,22 +198,24 @@ func (k *apikeyStore) authenticate(token string) (string, *mlkem.DecapsulationKe
 	}
 	wrapKey, err := deriveKDFKey(kdf, secret, rec.SaltWrap)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 	seed, err := aesUnwrap(wrapKey, rec.WrapNonce, rec.WrappedSeed)
 	if err != nil {
-		return "", nil, errBadAPIKey
+		return "", "", nil, errBadAPIKey
 	}
 	dk, err := mlkem.NewDecapsulationKey768(seed)
 	if err != nil {
-		return "", nil, errBadAPIKey
+		return "", "", nil, errBadAPIKey
 	}
-	return rec.Username, dk, nil
+	return rec.Username, scopeDecrypt, dk, nil
 }
 
 type APIKeyInfo struct {
 	KeyID   string `json:"key_id"`
 	Label   string `json:"label"`
+	Scope   string `json:"scope"`
+	Expires int64  `json:"expires"`
 	Created int64  `json:"created"`
 }
 
@@ -206,7 +237,14 @@ func (k *apikeyStore) list(username string) []APIKeyInfo {
 		if json.Unmarshal(b, &rec) != nil || rec.Username != username {
 			continue
 		}
-		out = append(out, APIKeyInfo{KeyID: rec.KeyID, Label: rec.Label, Created: rec.Created})
+		scope := rec.Scope
+		if scope == "" {
+			scope = scopeDecrypt
+		}
+		out = append(out, APIKeyInfo{
+			KeyID: rec.KeyID, Label: rec.Label, Scope: scope,
+			Expires: rec.Expires, Created: rec.Created,
+		})
 	}
 	return out
 }
