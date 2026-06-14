@@ -94,8 +94,15 @@ button:disabled { opacity: .6; cursor: default; }
 .opt input { width: auto; }
 
 .err { margin-top: 14px; color: var(--err); font-size: 14px; min-height: 18px; }
-.status { margin-top: 12px; font-size: 14px; min-height: 18px; }
+.status { margin-top: 12px; font-size: 14px; min-height: 18px; color: var(--dim); }
+.status.ok { color: var(--ok); }
+.status.err { color: var(--err); }
 .alt { margin-top: 16px; font-size: 14px; color: var(--dim); }
+
+/* small utilities (replace former inline styles, so CSP can drop unsafe-inline) */
+.inline-form { margin: 0; }
+.mt14 { margin-top: 14px; }
+.token { word-break: break-all; color: var(--accent-light); font-size: 13px; }
 
 .result {
   margin-top: 18px; padding: 14px;

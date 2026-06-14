@@ -41,7 +41,7 @@
           <td>{{.Size}}</td>
           <td>{{.When}}</td>
           <td><a class="dl" href="/api/msg/{{.ID}}">Download</a></td>
-          <td><form method="post" action="/api/msg/{{.ID}}/delete" style="margin:0"><button class="del" type="submit">Delete</button></form></td>
+          <td><form class="inline-form" method="post" action="/api/msg/{{.ID}}/delete"><button class="del" type="submit">Delete</button></form></td>
         </tr>
         {{end}}
       </table>
@@ -60,36 +60,22 @@
       </form>
       <div class="result" id="keyresult">
         <div>New token — copy it now, it won't be shown again:</div>
-        <code id="keytoken" style="word-break:break-all; color:var(--accent-light); font-size:13px;"></code>
+        <code id="keytoken" class="token"></code>
       </div>
       {{if .Keys}}
-      <table style="margin-top:14px">
+      <table class="mt14">
         <tr><th>Label</th><th>Key ID</th><th></th></tr>
         {{range .Keys}}
         <tr>
           <td>{{.Label}}</td>
           <td>{{.KeyID}}</td>
-          <td><form method="post" action="/api/keys/{{.KeyID}}/delete" style="margin:0"><button class="del" type="submit">Revoke</button></form></td>
+          <td><form class="inline-form" method="post" action="/api/keys/{{.KeyID}}/delete"><button class="del" type="submit">Revoke</button></form></td>
         </tr>
         {{end}}
       </table>
       {{end}}
     </div>
   </main>
-<script>
-const sf=document.getElementById('sendf'), st=document.getElementById('status');
-sf.addEventListener('submit', async e => {
-  e.preventDefault(); st.style.color='var(--dim)'; st.textContent='Sending…';
-  const res = await fetch('/api/send', {method:'POST', body:new FormData(sf)});
-  if(res.ok){ const j=await res.json(); st.style.color='var(--ok)'; st.textContent=j.ok; sf.reset(); }
-  else { st.style.color='var(--err)'; st.textContent=await res.text(); }
-});
-const kf=document.getElementById('keyf'), kr=document.getElementById('keyresult'), kt=document.getElementById('keytoken');
-kf.addEventListener('submit', async e => {
-  e.preventDefault();
-  const res = await fetch('/api/keys', {method:'POST', body:new FormData(kf)});
-  if(res.ok){ const j=await res.json(); kt.textContent=j.token; kr.classList.add('show'); kf.reset(); }
-});
-</script>
+<script src="/static/app.js"></script>
 </body>
 </html>

@@ -23,13 +23,6 @@
       <div class="alt">No account? <a href="/register">Create one</a></div>
     </div>
   </div>
-<script>
-const f=document.getElementById('f'), err=document.getElementById('err');
-f.addEventListener('submit', async e => {
-  e.preventDefault(); err.textContent='';
-  const res = await fetch('/api/login', {method:'POST', body:new FormData(f)});
-  if(res.ok){ location.href='/app'; } else { err.textContent = await res.text(); }
-});
-</script>
+<script src="/static/login.js"></script>
 </body>
 </html>
