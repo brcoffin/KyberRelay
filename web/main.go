@@ -56,9 +56,10 @@ type server struct {
 	store    *store
 	accounts *accounts
 	msgs     *messages
-	apikeys  *apikeyStore
-	sessions *sessionStore
-	tmpl     *template.Template
+	apikeys    *apikeyStore
+	sessions   *sessionStore
+	loginGuard *loginGuard
+	tmpl       *template.Template
 }
 
 func (s *server) render(w http.ResponseWriter, name string, data any) {
@@ -95,7 +96,9 @@ func main() {
 
 	s := &server{
 		cfg: cfg, store: st, accounts: acct, msgs: msgs, apikeys: keys,
-		sessions: newSessionStore(12 * time.Hour), tmpl: tmpl,
+		sessions:   newSessionStore(12 * time.Hour),
+		loginGuard: newLoginGuard(5, 15*time.Minute),
+		tmpl:       tmpl,
 	}
 
 	// Periodic sweep of expired items + inbox messages.
@@ -142,7 +145,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              cfg.addr,
-		Handler:           mux,
+		Handler:           securityHeaders(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	log.Printf("web: listening on %s (base %s), data=%s, max=%dB",

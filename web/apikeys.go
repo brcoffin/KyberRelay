@@ -41,6 +41,7 @@ type APIKey struct {
 	SaltWrap    []byte `json:"salt_wrap"`
 	WrapNonce   []byte `json:"wrap_nonce"`
 	WrappedSeed []byte `json:"wrapped_seed"`
+	KDF         string `json:"kdf"`
 	Created     int64  `json:"created"`
 }
 
@@ -112,7 +113,7 @@ func (k *apikeyStore) create(username, label string, seed []byte) (string, error
 	if err != nil {
 		return "", err
 	}
-	wrapKey, err := derive32(secret, saltWrap)
+	wrapKey, err := deriveKDFKey(kdfArgon2id, secret, saltWrap)
 	if err != nil {
 		return "", err
 	}
@@ -124,7 +125,7 @@ func (k *apikeyStore) create(username, label string, seed []byte) (string, error
 	rec := APIKey{
 		KeyID: keyID, Username: username, Label: label,
 		SecretHash: sum[:], SaltWrap: saltWrap, WrapNonce: nonce,
-		WrappedSeed: wrapped, Created: time.Now().Unix(),
+		WrappedSeed: wrapped, KDF: kdfArgon2id, Created: time.Now().Unix(),
 	}
 	b, err := json.Marshal(rec)
 	if err != nil {
@@ -162,7 +163,11 @@ func (k *apikeyStore) authenticate(token string) (string, *mlkem.DecapsulationKe
 		return "", nil, errBadAPIKey
 	}
 
-	wrapKey, err := derive32(secret, rec.SaltWrap)
+	kdf := rec.KDF
+	if kdf == "" {
+		kdf = kdfPBKDF2
+	}
+	wrapKey, err := deriveKDFKey(kdf, secret, rec.SaltWrap)
 	if err != nil {
 		return "", nil, err
 	}

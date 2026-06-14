@@ -107,6 +107,12 @@ func (s *server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	password := r.FormValue("password")
+	// Reject passwords found in known breaches (fail open if HIBP unreachable).
+	if breached, err := passwordBreached(password); err == nil && breached {
+		jsonError(w, http.StatusBadRequest,
+			"That password has appeared in a data breach — please choose a different one.")
+		return
+	}
 	if _, err := s.accounts.register(username, password); err != nil {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
@@ -125,11 +131,20 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	password := r.FormValue("password")
+
+	ip := clientIP(r)
+	if s.loginGuard.locked("u:"+username) || s.loginGuard.locked("ip:"+ip) {
+		jsonError(w, http.StatusTooManyRequests, "too many attempts — try again in a few minutes")
+		return
+	}
 	_, dk, err := s.accounts.authenticate(username, password)
 	if err != nil {
+		s.loginGuard.fail("u:" + username)
+		s.loginGuard.fail("ip:" + ip)
 		jsonError(w, http.StatusUnauthorized, "invalid username or password")
 		return
 	}
+	s.loginGuard.reset("u:" + username)
 	s.startSession(w, username, dk)
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"ok":true}`))

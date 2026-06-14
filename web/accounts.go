@@ -15,6 +15,8 @@ import (
 	"regexp"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/argon2"
 )
 
 // Account system (public-key, send-by-username) for the web service.
@@ -26,7 +28,25 @@ import (
 // only transiently, inside a logged-in session — a database leak alone cannot
 // decrypt anyone's files. (Trade-off: a forgotten password is unrecoverable.)
 
-const accountIter = 200_000
+// KDF selection. New accounts/keys use Argon2id (memory-hard); legacy records
+// (KDF "" or "pbkdf2") still verify with PBKDF2 so nothing breaks.
+const (
+	kdfArgon2id = "argon2id"
+	kdfPBKDF2   = "pbkdf2"
+
+	accountIter  = 200_000     // legacy PBKDF2 iterations
+	argonTime    = 2           // Argon2id passes
+	argonMemKiB  = 64 * 1024   // 64 MiB
+	argonThreads = 2
+)
+
+// deriveKey derives a 32-byte key from a password using the named KDF.
+func deriveKDFKey(kdf, password string, salt []byte) ([]byte, error) {
+	if kdf == kdfPBKDF2 {
+		return pbkdf2.Key(sha256.New, password, salt, accountIter, 32)
+	}
+	return argon2.IDKey([]byte(password), salt, argonTime, argonMemKiB, argonThreads, 32), nil
+}
 
 var (
 	errUserExists = errors.New("username already taken")
@@ -44,6 +64,7 @@ type User struct {
 	SaltWrap   []byte `json:"salt_wrap"`
 	WrapNonce  []byte `json:"wrap_nonce"`
 	WrappedKey []byte `json:"wrapped_key"` // AES-GCM-wrapped 64-byte decapsulation seed
+	KDF        string `json:"kdf"`         // "argon2id" (new) or "pbkdf2"/"" (legacy)
 	Plan       string `json:"plan"`        // "" / "free" / "pro"
 	Created    int64  `json:"created"`
 }
@@ -76,16 +97,12 @@ func (a *accounts) load(username string) (*User, error) {
 	return &u, nil
 }
 
-func derive32(password string, salt []byte) ([]byte, error) {
-	return pbkdf2.Key(sha256.New, password, salt, accountIter, 32)
-}
-
 func (a *accounts) register(username, password string) (*User, error) {
 	if !validUsername.MatchString(username) {
 		return nil, errors.New("invalid username (3-32 chars: a-z, 0-9, _, -)")
 	}
-	if len(password) < 8 {
-		return nil, errors.New("password must be at least 8 characters")
+	if len(password) < 12 {
+		return nil, errors.New("password must be at least 12 characters")
 	}
 
 	a.mu.Lock()
@@ -98,7 +115,7 @@ func (a *accounts) register(username, password string) (*User, error) {
 	if _, err := rand.Read(saltAuth); err != nil {
 		return nil, err
 	}
-	pwHash, err := derive32(password, saltAuth)
+	pwHash, err := deriveKDFKey(kdfArgon2id, password, saltAuth)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +131,7 @@ func (a *accounts) register(username, password string) (*User, error) {
 	if _, err := rand.Read(saltWrap); err != nil {
 		return nil, err
 	}
-	wrapKey, err := derive32(password, saltWrap)
+	wrapKey, err := deriveKDFKey(kdfArgon2id, password, saltWrap)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +152,7 @@ func (a *accounts) register(username, password string) (*User, error) {
 	u := &User{
 		Username: username, SaltAuth: saltAuth, PwHash: pwHash, PubKey: pub,
 		SaltWrap: saltWrap, WrapNonce: wrapNonce, WrappedKey: wrapped,
-		Plan: "free", Created: time.Now().Unix(),
+		KDF: kdfArgon2id, Plan: "free", Created: time.Now().Unix(),
 	}
 	b, err := json.Marshal(u)
 	if err != nil {
@@ -158,7 +175,11 @@ func (a *accounts) authenticate(username, password string) (*User, *mlkem.Decaps
 	if err != nil {
 		return nil, nil, errBadLogin
 	}
-	want, err := derive32(password, u.SaltAuth)
+	kdf := u.KDF
+	if kdf == "" {
+		kdf = kdfPBKDF2 // legacy records predate the KDF field
+	}
+	want, err := deriveKDFKey(kdf, password, u.SaltAuth)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -166,7 +187,7 @@ func (a *accounts) authenticate(username, password string) (*User, *mlkem.Decaps
 		return nil, nil, errBadLogin
 	}
 
-	wrapKey, err := derive32(password, u.SaltWrap)
+	wrapKey, err := deriveKDFKey(kdf, password, u.SaltWrap)
 	if err != nil {
 		return nil, nil, err
 	}
