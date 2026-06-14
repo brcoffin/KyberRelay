@@ -65,12 +65,39 @@ func (s *server) handle2FAEnable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u.TOTPEnabled = true
+	display, hashes := newRecoveryCodes(10)
+	u.RecoveryCodes = hashes
 	if err := s.accounts.save(u); err != nil {
 		jsonError(w, http.StatusInternalServerError, "could not save")
 		return
 	}
 	s.audit.log("2fa_enabled", sess.username, clientIP(r), "")
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "recovery_codes": display})
+}
+
+// POST /api/2fa/recovery — regenerate recovery codes (invalidates old ones).
+func (s *server) handle2FARecovery(w http.ResponseWriter, r *http.Request) {
+	sess, ok := s.requireSession(w, r)
+	if !ok {
+		return
+	}
+	u, err := s.accounts.load(sess.username)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "could not load account")
+		return
+	}
+	if !u.TOTPEnabled {
+		jsonError(w, http.StatusBadRequest, "2FA is not enabled")
+		return
+	}
+	display, hashes := newRecoveryCodes(10)
+	u.RecoveryCodes = hashes
+	if err := s.accounts.save(u); err != nil {
+		jsonError(w, http.StatusInternalServerError, "could not save")
+		return
+	}
+	s.audit.log("2fa_recovery_regenerated", sess.username, clientIP(r), "")
+	writeJSON(w, http.StatusOK, map[string]any{"recovery_codes": display})
 }
 
 // POST /api/2fa/disable — turn off 2FA (requires a current code). Requires login.

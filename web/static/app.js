@@ -38,14 +38,35 @@ if (tfaSetup) {
   });
 }
 
+function showRecoveryCodes(codes) {
+  const list = document.getElementById('tfa-code-list');
+  list.innerHTML = '';
+  (codes || []).forEach((c) => { const li = document.createElement('li'); li.textContent = c; list.appendChild(li); });
+  const enroll = document.getElementById('tfa-enroll'); if (enroll) enroll.classList.add('hidden');
+  document.getElementById('tfa-codes').classList.remove('hidden');
+}
+
 const tfaEnable = document.getElementById('tfa-enable');
 if (tfaEnable) {
   tfaEnable.addEventListener('submit', async (e) => {
     e.preventDefault();
     const res = await fetch('/api/2fa/enable', { method: 'POST', body: new FormData(tfaEnable) });
-    if (res.ok) { location.reload(); } else { tfaMsg(await res.text(), 'err'); }
+    if (res.ok) { const j = await res.json(); showRecoveryCodes(j.recovery_codes); }
+    else { tfaMsg(await res.text(), 'err'); }
   });
 }
+
+const tfaRegen = document.getElementById('tfa-regen');
+if (tfaRegen) {
+  tfaRegen.addEventListener('click', async () => {
+    const res = await fetch('/api/2fa/recovery', { method: 'POST' });
+    if (res.ok) { const j = await res.json(); showRecoveryCodes(j.recovery_codes); }
+    else { tfaMsg(await res.text(), 'err'); }
+  });
+}
+
+const tfaDone = document.getElementById('tfa-done');
+if (tfaDone) { tfaDone.addEventListener('click', () => location.reload()); }
 
 const tfaDisable = document.getElementById('tfa-disable');
 if (tfaDisable) {

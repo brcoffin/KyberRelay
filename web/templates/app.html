@@ -94,9 +94,11 @@
       <h2>Two-factor authentication</h2>
       {{if .TOTPEnabled}}
       <p class="sub"><span class="badge-on">On.</span> You'll be asked for an authenticator code at login.</p>
-      <form id="tfa-disable">
+      <p class="muted">{{.RecoveryLeft}} recovery code(s) remaining.</p>
+      <button class="primary" id="tfa-regen">Regenerate recovery codes</button>
+      <form id="tfa-disable" class="mt14">
         <label for="dcode">Authenticator code</label>
-        <input id="dcode" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" required>
+        <input id="dcode" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit or recovery code" required>
         <button class="primary" type="submit">Disable 2FA</button>
       </form>
       {{else}}
@@ -112,6 +114,11 @@
         </form>
       </div>
       {{end}}
+      <div id="tfa-codes" class="hidden">
+        <p class="muted">Save these one-time recovery codes somewhere safe — each lets you sign in once if you lose your authenticator. They won't be shown again.</p>
+        <ol id="tfa-code-list" class="token"></ol>
+        <button class="primary" id="tfa-done">Done</button>
+      </div>
       <div class="status" id="tfa-status"></div>
     </div>
 

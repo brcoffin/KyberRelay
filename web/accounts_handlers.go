@@ -181,7 +181,14 @@ func (s *server) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusTooManyRequests, "too many attempts — try again later")
 		return
 	}
-	if !totpVerify(pl.totpSecret, r.FormValue("code")) {
+	code := r.FormValue("code")
+	how := "2fa"
+	verified := totpVerify(pl.totpSecret, code)
+	if !verified && s.accounts.consumeRecovery(pl.username, code) {
+		verified = true
+		how = "recovery"
+	}
+	if !verified {
 		s.loginGuard.fail(guardKey)
 		s.audit.log("totp_failed", pl.username, clientIP(r), "")
 		jsonError(w, http.StatusUnauthorized, "invalid code")
@@ -190,7 +197,7 @@ func (s *server) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 	s.loginGuard.reset(guardKey)
 	s.pending.del(r.FormValue("pending"))
 	s.startSession(w, pl.username, pl.dk)
-	s.audit.log("login", pl.username, clientIP(r), "2fa")
+	s.audit.log("login", pl.username, clientIP(r), how)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -263,9 +270,11 @@ func (s *server) handleApp(w http.ResponseWriter, r *http.Request) {
 	}
 	plan := planFor("free")
 	totp := false
+	recoveryLeft := 0
 	if u, err := s.accounts.load(sess.username); err == nil {
 		plan = planFor(u.Plan)
 		totp = u.TOTPEnabled
+		recoveryLeft = len(u.RecoveryCodes)
 	}
 	type keyRow struct{ KeyID, Label, Scope, Expiry string }
 	var keyRows []keyRow
@@ -292,8 +301,9 @@ func (s *server) handleApp(w http.ResponseWriter, r *http.Request) {
 		"Activity":    activity,
 		"Plan":        plan.Label,
 		"MaxMB":       plan.MaxFileBytes / (1 << 20),
-		"RetentionH":  int(plan.TTL.Hours()),
-		"TOTPEnabled": totp,
+		"RetentionH":   int(plan.TTL.Hours()),
+		"TOTPEnabled":  totp,
+		"RecoveryLeft": recoveryLeft,
 	})
 }
 

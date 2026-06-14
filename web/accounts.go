@@ -69,13 +69,35 @@ type User struct {
 	Created    int64  `json:"created"`
 
 	// TOTP 2FA. Secret is wrapped under totpKey(decapsulation key).
-	TOTPEnabled bool   `json:"totp_enabled,omitempty"`
-	TOTPNonce   []byte `json:"totp_nonce,omitempty"`
-	TOTPSecret  []byte `json:"totp_secret,omitempty"`
+	TOTPEnabled   bool     `json:"totp_enabled,omitempty"`
+	TOTPNonce     []byte   `json:"totp_nonce,omitempty"`
+	TOTPSecret    []byte   `json:"totp_secret,omitempty"`
+	RecoveryCodes []string `json:"recovery_codes,omitempty"` // SHA-256 hashes, single-use
 
 	// Billing (Stripe).
 	StripeCustomerID string `json:"stripe_customer_id,omitempty"`
 	StripeSubID      string `json:"stripe_sub_id,omitempty"`
+}
+
+// consumeRecovery verifies a 2FA recovery code and, if valid, removes it
+// (single-use) and persists the change. Returns true on success.
+func (a *accounts) consumeRecovery(username, code string) bool {
+	if normalizeRecovery(code) == "" {
+		return false
+	}
+	u, err := a.load(username)
+	if err != nil {
+		return false
+	}
+	h := hashRecovery(code)
+	for i, rc := range u.RecoveryCodes {
+		if subtle.ConstantTimeCompare([]byte(rc), []byte(h)) == 1 {
+			u.RecoveryCodes = append(u.RecoveryCodes[:i], u.RecoveryCodes[i+1:]...)
+			_ = a.save(u)
+			return true
+		}
+	}
+	return false
 }
 
 // findByStripeCustomer scans for the user with the given Stripe customer ID.

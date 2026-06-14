@@ -10,6 +10,7 @@ import (
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"strings"
@@ -91,6 +92,37 @@ func totpQRDataURI(uri string) (string, error) {
 // their decapsulation key — so the secret is only recoverable with the private
 // key (itself password-wrapped), and is available during login (we hold the
 // unwrapped key in the pending-login state).
+// --- 2FA recovery codes ---
+
+// newRecoveryCodes returns n one-time codes for display ("abcd-efgh") and their
+// SHA-256 hashes for storage. Codes are high-entropy, so a fast hash is fine.
+func newRecoveryCodes(n int) (display []string, hashes []string) {
+	for i := 0; i < n; i++ {
+		b := make([]byte, 5)
+		_, _ = rand.Read(b)
+		s := strings.ToLower(totpBase32.EncodeToString(b)) // 8 chars
+		display = append(display, s[:4]+"-"+s[4:])
+		hashes = append(hashes, hashRecovery(s))
+	}
+	return display, hashes
+}
+
+func normalizeRecovery(s string) string {
+	s = strings.ToLower(s)
+	var b strings.Builder
+	for _, c := range s {
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
+			b.WriteRune(c)
+		}
+	}
+	return b.String()
+}
+
+func hashRecovery(s string) string {
+	sum := sha256.Sum256([]byte(normalizeRecovery(s)))
+	return hex.EncodeToString(sum[:])
+}
+
 func totpKey(dk *mlkem.DecapsulationKey768) []byte {
 	seed := dk.Bytes()
 	sum := sha256.Sum256(append(append([]byte{}, seed...), []byte("totp-wrap")...))

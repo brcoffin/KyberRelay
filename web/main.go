@@ -137,6 +137,7 @@ func main() {
 	mux.HandleFunc("POST /api/2fa/setup", s.handle2FASetup)
 	mux.HandleFunc("POST /api/2fa/enable", s.handle2FAEnable)
 	mux.HandleFunc("POST /api/2fa/disable", s.handle2FADisable)
+	mux.HandleFunc("POST /api/2fa/recovery", s.handle2FARecovery)
 	mux.HandleFunc("GET /app", s.handleApp)
 	mux.HandleFunc("POST /api/send", s.handleSend)
 	mux.HandleFunc("GET /api/msg/{id}", s.handleMsgDownload)
