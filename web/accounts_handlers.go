@@ -414,13 +414,13 @@ func (s *server) handleApp(w http.ResponseWriter, r *http.Request) {
 		activity = append(activity, actRow{when, e.Event, e.Detail})
 	}
 	s.render(w, "app.html", map[string]any{
-		"User":        sess.username,
-		"CSRF":        sess.csrf,
-		"Inbox":       rows,
-		"Keys":        keyRows,
-		"Activity":    activity,
-		"Plan":        plan.Label,
-		"MaxMB":       plan.MaxFileBytes / (1 << 20),
+		"User":         sess.username,
+		"CSRF":         sess.csrf,
+		"Inbox":        rows,
+		"Keys":         keyRows,
+		"Activity":     activity,
+		"Plan":         plan.Label,
+		"MaxMB":        plan.MaxFileBytes / (1 << 20),
 		"RetentionH":   int(plan.TTL.Hours()),
 		"TOTPEnabled":  totp,
 		"RecoveryLeft": recoveryLeft,

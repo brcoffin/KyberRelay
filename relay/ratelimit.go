@@ -10,11 +10,11 @@ import (
 // the relay or exhaust its disk. It is deliberately simple and in-memory:
 // state resets on restart, which is fine for an abuse speed-bump.
 type rateLimiter struct {
-	mu      sync.Mutex
-	hits    map[string][]time.Time
-	limit   int
-	window  time.Duration
-	lastGC  time.Time
+	mu     sync.Mutex
+	hits   map[string][]time.Time
+	limit  int
+	window time.Duration
+	lastGC time.Time
 }
 
 func newRateLimiter(limit int, window time.Duration) *rateLimiter {

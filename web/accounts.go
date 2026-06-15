@@ -36,9 +36,9 @@ const (
 	kdfArgon2id = "argon2id"
 	kdfPBKDF2   = "pbkdf2"
 
-	accountIter  = 200_000     // legacy PBKDF2 iterations
-	argonTime    = 2           // Argon2id passes
-	argonMemKiB  = 64 * 1024   // 64 MiB
+	accountIter  = 200_000   // legacy PBKDF2 iterations
+	argonTime    = 2         // Argon2id passes
+	argonMemKiB  = 64 * 1024 // 64 MiB
 	argonThreads = 2
 )
 
@@ -67,7 +67,7 @@ type User struct {
 	Username   string `json:"username"`
 	SaltAuth   []byte `json:"salt_auth"`
 	PwHash     []byte `json:"pw_hash"`
-	PubKey     []byte `json:"pub_key"`     // ML-KEM-768 encapsulation key (1184 B)
+	PubKey     []byte `json:"pub_key"` // ML-KEM-768 encapsulation key (1184 B)
 	SaltWrap   []byte `json:"salt_wrap"`
 	WrapNonce  []byte `json:"wrap_nonce"`
 	WrappedKey []byte `json:"wrapped_key"` // AES-GCM-wrapped 64-byte decapsulation seed

@@ -60,10 +60,10 @@ func loadConfig() config {
 }
 
 type server struct {
-	cfg      config
-	store    *store
-	accounts *accounts
-	msgs     *messages
+	cfg        config
+	store      *store
+	accounts   *accounts
+	msgs       *messages
 	apikeys    *apikeyStore
 	sessions   *sessionStore
 	pending    *pendingStore
