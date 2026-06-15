@@ -2,16 +2,18 @@
 # Re-brand a Stripe account's customer-facing name to KyberCrypt via the API.
 #
 # Sets, where the API permits: the account's public business name, statement
-# descriptor (what shows on bank/card statements), and brand primary color; plus
-# the subscription Product's name + statement descriptor. The Checkout/email LOGO
-# is a file upload and must be done in the Dashboard (Settings → Branding).
+# descriptor (what shows on bank/card statements), brand primary color, and —
+# if ICON_FILE/LOGO_FILE are given — the branding icon/logo (uploaded via the
+# Files API); plus the subscription Product's name + statement descriptor.
 #
 # SAFE BY DEFAULT: this is a DRY RUN unless you pass APPLY=1. It reads the secret
 # key from $STRIPE_SECRET_KEY and never prints or stores it.
 #
 # Usage:
 #   STRIPE_SECRET_KEY=sk_live_xxx STRIPE_PRICE_ID=price_xxx ./stripe-brand.sh        # preview
-#   STRIPE_SECRET_KEY=sk_live_xxx STRIPE_PRICE_ID=price_xxx APPLY=1 ./stripe-brand.sh # write
+#   STRIPE_SECRET_KEY=sk_live_xxx STRIPE_PRICE_ID=price_xxx \
+#     ICON_FILE=kybercrypt-icon-512.png LOGO_FILE=kybercrypt-logo.png \
+#     APPLY=1 ./stripe-brand.sh                                                       # write + upload
 #
 # Tip: run against a test key first (sk_test_...).
 set -euo pipefail
@@ -43,6 +45,13 @@ echo
 
 # api METHOD PATH [curl args...] -> raw JSON
 api() { local m=$1 p=$2; shift 2; curl -s -X "$m" "$API$p" -u "$STRIPE_SECRET_KEY:" "$@"; }
+# upload_file PATH PURPOSE -> file id (uses the Files API host)
+upload_file() {
+  local path=$1 purpose=$2
+  if [ ! -f "$path" ]; then echo "  ! file not found: $path" >&2; return; fi
+  curl -s https://files.stripe.com/v1/files -u "$STRIPE_SECRET_KEY:" \
+    -F "purpose=$purpose" -F "file=@$path" | field "d.get('id','')"
+}
 # field JSON 'python-expr on d' -> value
 field() { "$PY" -c "import sys,json
 try: d=json.load(sys.stdin)
@@ -64,11 +73,23 @@ cur_desc=$(printf '%s' "$acct" | field "((d.get('settings') or {}).get('payments
 echo "Account: $acct_id"
 echo "  public name:           '$cur_name'  ->  '$BRAND_NAME'"
 echo "  statement descriptor:  '$cur_desc'  ->  '$DESCRIPTOR'"
+[ -n "${ICON_FILE:-}" ] && echo "  icon:                  upload '$ICON_FILE' (square)"
+[ -n "${LOGO_FILE:-}" ] && echo "  logo:                  upload '$LOGO_FILE'"
 if [ "$APPLY" = "1" ]; then
+  brand=()
+  if [ -n "${ICON_FILE:-}" ]; then
+    fid=$(upload_file "$ICON_FILE" business_icon)
+    [ -n "$fid" ] && { brand+=(--data-urlencode "settings[branding][icon]=$fid"); echo "  ✓ icon uploaded ($fid)"; }
+  fi
+  if [ -n "${LOGO_FILE:-}" ]; then
+    fid=$(upload_file "$LOGO_FILE" business_logo)
+    [ -n "$fid" ] && { brand+=(--data-urlencode "settings[branding][logo]=$fid"); echo "  ✓ logo uploaded ($fid)"; }
+  fi
   resp=$(api POST "/accounts/$acct_id" \
     --data-urlencode "business_profile[name]=$BRAND_NAME" \
     --data-urlencode "settings[payments][statement_descriptor]=$DESCRIPTOR" \
-    --data-urlencode "settings[branding][primary_color]=$BRAND_COLOR")
+    --data-urlencode "settings[branding][primary_color]=$BRAND_COLOR" \
+    ${brand[@]+"${brand[@]}"})
   e=$(printf '%s' "$resp" | err_of)
   if [ -n "$e" ]; then
     echo "  ! account update rejected: $e"
@@ -113,6 +134,8 @@ else
 fi
 
 echo
-echo "Remaining manual step: upload the KyberCrypt logo/icon in"
-echo "  Dashboard → Settings → Branding  (image upload isn't scripted here)."
+if [ -z "${ICON_FILE:-}" ] && [ -z "${LOGO_FILE:-}" ]; then
+  echo "No ICON_FILE/LOGO_FILE given — set them to upload branding images too,"
+  echo "or upload in Dashboard → Settings → Branding."
+fi
 [ "$APPLY" = "1" ] || echo "This was a DRY RUN. Re-run with APPLY=1 to write the changes above."
