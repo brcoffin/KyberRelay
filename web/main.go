@@ -13,6 +13,7 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"log"
@@ -81,37 +82,34 @@ func (s *server) render(w http.ResponseWriter, name string, data any) {
 	}
 }
 
-func main() {
-	cfg := loadConfig()
-
+// newServer builds the server and all its stores from cfg. Used by main() and
+// by the integration tests (which point cfg.dataDir at a temp dir).
+func newServer(cfg config) (*server, error) {
 	st, err := newStore(cfg.dataDir)
 	if err != nil {
-		log.Fatalf("web: data dir: %v", err)
+		return nil, fmt.Errorf("data dir: %w", err)
 	}
 	acct, err := newAccounts(filepath.Join(cfg.dataDir, "users"))
 	if err != nil {
-		log.Fatalf("web: accounts dir: %v", err)
+		return nil, fmt.Errorf("accounts dir: %w", err)
 	}
 	msgs, err := newMessages(filepath.Join(cfg.dataDir, "inbox"))
 	if err != nil {
-		log.Fatalf("web: inbox dir: %v", err)
+		return nil, fmt.Errorf("inbox dir: %w", err)
 	}
 	keys, err := newAPIKeyStore(filepath.Join(cfg.dataDir, "apikeys"))
 	if err != nil {
-		log.Fatalf("web: apikeys dir: %v", err)
+		return nil, fmt.Errorf("apikeys dir: %w", err)
 	}
-
 	tmpl, err := template.ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
-		log.Fatalf("web: templates: %v", err)
+		return nil, fmt.Errorf("templates: %w", err)
 	}
-
 	maxUploads := int(envInt64("WEB_MAX_UPLOADS", 6))
 	if maxUploads < 1 {
 		maxUploads = 1
 	}
-
-	s := &server{
+	return &server{
 		cfg: cfg, store: st, accounts: acct, msgs: msgs, apikeys: keys,
 		sessions:   newSessionStore(12 * time.Hour),
 		pending:    newPendingStore(5 * time.Minute),
@@ -121,23 +119,11 @@ func main() {
 		billing:    loadBilling(),
 		audit:      newAuditor(cfg.dataDir),
 		tmpl:       tmpl,
-	}
+	}, nil
+}
 
-	if err := s.audit.verify(); err != nil {
-		log.Printf("web: AUDIT LOG INTEGRITY WARNING: %v", err)
-	} else {
-		log.Printf("web: audit log integrity OK")
-	}
-
-	// Periodic sweep of expired items + inbox messages.
-	go func() {
-		for {
-			s.store.sweep()
-			s.msgs.sweep()
-			time.Sleep(cfg.defaultTTL / 4)
-		}
-	}()
-
+// handler builds the full routed handler chain (mux + security middleware).
+func (s *server) handler() http.Handler {
 	mux := http.NewServeMux()
 	// Account-first: "/" routes to the app or login. The anonymous
 	// link+passphrase endpoints are intentionally not registered.
@@ -183,9 +169,34 @@ func main() {
 	mux.HandleFunc("POST /api/billing/webhook", s.handleWebhook)
 	mux.HandleFunc("GET /billing/success", s.handleBillingSuccess)
 
+	return securityHeaders(s.csrfGuard(mux))
+}
+
+func main() {
+	cfg := loadConfig()
+	s, err := newServer(cfg)
+	if err != nil {
+		log.Fatalf("web: %v", err)
+	}
+
+	if err := s.audit.verify(); err != nil {
+		log.Printf("web: AUDIT LOG INTEGRITY WARNING: %v", err)
+	} else {
+		log.Printf("web: audit log integrity OK")
+	}
+
+	// Periodic sweep of expired items + inbox messages.
+	go func() {
+		for {
+			s.store.sweep()
+			s.msgs.sweep()
+			time.Sleep(cfg.defaultTTL / 4)
+		}
+	}()
+
 	srv := &http.Server{
 		Addr:              cfg.addr,
-		Handler:           securityHeaders(s.csrfGuard(mux)),
+		Handler:           s.handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	log.Printf("web: listening on %s (base %s), data=%s, max=%dB",
