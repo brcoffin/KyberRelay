@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha1"
+	"crypto/subtle"
 	"encoding/hex"
 	"io"
 	"net"
@@ -50,23 +51,50 @@ func clientIP(r *http.Request) string {
 
 // --- CSRF: cross-origin guard for cookie-authenticated, state-changing requests ---
 
-// csrfGuard rejects cross-origin state-changing requests. The cookie-driven UI
-// is always same-origin; the Bearer API (Authorization header — not sent
-// cross-site automatically) and the signature-verified Stripe webhook are not
-// cookie-authenticated, so they are exempt.
-func csrfGuard(allowedHost string, next http.Handler) http.Handler {
+// csrfGuard defends state-changing requests with two layers: a same-origin
+// check (Origin/Referer), and — once a session exists — a per-session
+// synchronizer token. The Bearer API (Authorization header, not sent cross-site
+// automatically) and the signature-verified Stripe webhook are not
+// cookie-authenticated, so they are exempt. Pre-auth POSTs (login/register/totp)
+// have no session yet and rely on the origin check alone.
+func (s *server) csrfGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-			if r.Header.Get("Authorization") == "" &&
-				r.URL.Path != "/api/billing/webhook" &&
-				!sameOrigin(r, allowedHost) {
+			if r.Header.Get("Authorization") != "" || r.URL.Path == "/api/billing/webhook" {
+				break // not cookie-authenticated
+			}
+			if !sameOrigin(r, s.cfg.host) {
 				http.Error(w, "cross-origin request blocked", http.StatusForbidden)
+				return
+			}
+			if sess, ok := s.sessions.current(r); ok && !validCSRFToken(r, sess.csrf) {
+				http.Error(w, "invalid or missing CSRF token", http.StatusForbidden)
 				return
 			}
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// validCSRFToken checks the submitted token (X-CSRF-Token header for fetch/XHR,
+// or the csrf_token field for plain HTML form posts) against the session's
+// token in constant time. The form-field fallback only parses urlencoded bodies
+// — multipart uploads always carry the header, so their body is never consumed
+// here.
+func validCSRFToken(r *http.Request, want string) bool {
+	got := r.Header.Get("X-CSRF-Token")
+	if got == "" {
+		ct := r.Header.Get("Content-Type")
+		if i := strings.IndexByte(ct, ';'); i >= 0 {
+			ct = ct[:i]
+		}
+		if strings.TrimSpace(ct) == "application/x-www-form-urlencoded" {
+			_ = r.ParseForm()
+			got = r.PostForm.Get("csrf_token")
+		}
+	}
+	return want != "" && subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
 }
 
 // sameOrigin reports whether the request's Origin (or Referer, as a fallback)

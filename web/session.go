@@ -17,6 +17,7 @@ const sessionCookie = "kyz_session"
 type session struct {
 	username string
 	dk       *mlkem.DecapsulationKey768
+	csrf     string // per-session CSRF token (synchronizer pattern)
 	expires  time.Time
 }
 
@@ -31,13 +32,17 @@ func newSessionStore(ttl time.Duration) *sessionStore {
 }
 
 func (s *sessionStore) create(username string, dk *mlkem.DecapsulationKey768) (string, error) {
-	var b [32]byte
+	var b, c [32]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
 	}
+	if _, err := rand.Read(c[:]); err != nil {
+		return "", err
+	}
 	token := base64.RawURLEncoding.EncodeToString(b[:])
+	csrf := base64.RawURLEncoding.EncodeToString(c[:])
 	s.mu.Lock()
-	s.m[token] = &session{username: username, dk: dk, expires: time.Now().Add(s.ttl)}
+	s.m[token] = &session{username: username, dk: dk, csrf: csrf, expires: time.Now().Add(s.ttl)}
 	s.mu.Unlock()
 	return token, nil
 }

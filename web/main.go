@@ -123,6 +123,12 @@ func main() {
 		tmpl:       tmpl,
 	}
 
+	if err := s.audit.verify(); err != nil {
+		log.Printf("web: AUDIT LOG INTEGRITY WARNING: %v", err)
+	} else {
+		log.Printf("web: audit log integrity OK")
+	}
+
 	// Periodic sweep of expired items + inbox messages.
 	go func() {
 		for {
@@ -179,7 +185,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              cfg.addr,
-		Handler:           securityHeaders(csrfGuard(cfg.host, mux)),
+		Handler:           securityHeaders(s.csrfGuard(mux)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	log.Printf("web: listening on %s (base %s), data=%s, max=%dB",

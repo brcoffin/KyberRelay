@@ -9,8 +9,10 @@ import (
 func (s *server) handlePricing(w http.ResponseWriter, r *http.Request) {
 	loggedIn := false
 	plan := "free"
+	csrf := ""
 	if sess, ok := s.sessions.current(r); ok {
 		loggedIn = true
+		csrf = sess.csrf
 		if u, err := s.accounts.load(sess.username); err == nil {
 			plan = planFor(u.Plan).Name
 		}
@@ -19,6 +21,7 @@ func (s *server) handlePricing(w http.ResponseWriter, r *http.Request) {
 	pro := plans["pro"]
 	s.render(w, "pricing.html", map[string]any{
 		"LoggedIn":     loggedIn,
+		"CSRF":         csrf,
 		"IsPro":        plan == "pro",
 		"BillingOn":    s.billing.enabled(),
 		"ProPrice":     s.billing.proPrice,

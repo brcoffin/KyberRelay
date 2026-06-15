@@ -415,6 +415,7 @@ func (s *server) handleApp(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, "app.html", map[string]any{
 		"User":        sess.username,
+		"CSRF":        sess.csrf,
 		"Inbox":       rows,
 		"Keys":        keyRows,
 		"Activity":    activity,

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{.CSRF}}">
 <title>KyberCrypt — Inbox</title>
 <link rel="icon" type="image/svg+xml" href="/static/kybercrypt-icon.svg">
 <link rel="stylesheet" href="/static/app.css">
@@ -14,7 +15,7 @@
       <span class="wordmark">Kyber<span class="c">Crypt</span></span>
       <span class="who">{{.User}}</span>
     </a>
-    <form method="post" action="/api/logout"><button class="logout" type="submit">Log out</button></form>
+    <form method="post" action="/api/logout"><input type="hidden" name="csrf_token" value="{{.CSRF}}"><button class="logout" type="submit">Log out</button></form>
   </header>
   <main>
     <div class="card">
@@ -41,7 +42,7 @@
           <td>{{.Size}}</td>
           <td>{{.When}}</td>
           <td><a class="dl" href="/api/msg/{{.ID}}">Download</a></td>
-          <td><form class="inline-form" method="post" action="/api/msg/{{.ID}}/delete"><button class="del" type="submit">Delete</button></form></td>
+          <td><form class="inline-form" method="post" action="/api/msg/{{.ID}}/delete"><input type="hidden" name="csrf_token" value="{{$.CSRF}}"><button class="del" type="submit">Delete</button></form></td>
         </tr>
         {{end}}
       </table>
@@ -83,7 +84,7 @@
           <td>{{.Scope}}</td>
           <td>{{.Expiry}}</td>
           <td>{{.KeyID}}</td>
-          <td><form class="inline-form" method="post" action="/api/keys/{{.KeyID}}/delete"><button class="del" type="submit">Revoke</button></form></td>
+          <td><form class="inline-form" method="post" action="/api/keys/{{.KeyID}}/delete"><input type="hidden" name="csrf_token" value="{{$.CSRF}}"><button class="del" type="submit">Revoke</button></form></td>
         </tr>
         {{end}}
       </table>
@@ -124,7 +125,7 @@
 
     <div class="card">
       <h2>Change password</h2>
-      <p class="sub">Your private key is re-encrypted under the new password. API keys keep working.</p>
+      <p class="sub">Your private key is re-encrypted under the new password. For your security, this signs out other sessions and revokes all existing API keys.</p>
       <form id="pwform">
         <label for="curpw">Current password</label>
         <input id="curpw" name="current_password" type="password" autocomplete="current-password" required>
