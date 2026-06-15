@@ -20,15 +20,15 @@ func (s *server) handlePricing(w http.ResponseWriter, r *http.Request) {
 	free := plans["free"]
 	pro := plans["pro"]
 	s.render(w, "pricing.html", map[string]any{
-		"LoggedIn":   loggedIn,
-		"CSRF":       csrf,
-		"IsPro":      plan == "pro",
-		"BillingOn":  s.billing.enabled(),
-		"ProPrice":   s.billing.proPrice,
-		"FreeMaxMB":  free.MaxFileBytes / (1 << 20),
-		"FreeRetH":   int(free.TTL.Hours()),
-		"ProMaxMB":   pro.MaxFileBytes / (1 << 20),
-		"ProRetDays": int(pro.TTL.Hours()) / 24,
+		"LoggedIn":  loggedIn,
+		"CSRF":      csrf,
+		"IsPro":     plan == "pro",
+		"BillingOn": s.billing.enabled(),
+		"ProPrice":  s.billing.proPrice,
+		"FreeMax":   planMaxLabel(free),
+		"FreeRet":   retentionLabel(free.TTL),
+		"ProMax":    planMaxLabel(pro),
+		"ProRet":    retentionLabel(pro.TTL),
 	})
 }
 

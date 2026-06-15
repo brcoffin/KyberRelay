@@ -16,10 +16,10 @@
         <h2>Free</h2>
         <p class="price">$0</p>
         <ul>
-          <li>Files up to {{.FreeMaxMB}} MB</li>
-          <li>{{.FreeRetH}}h retention</li>
+          <li>Files up to {{.FreeMax}} per transfer</li>
+          <li>Kept up to {{.FreeRet}} (deleted on download)</li>
           <li>Post-quantum encryption (ML-KEM)</li>
-          <li>API access</li>
+          <li>Send-only API access</li>
         </ul>
         {{if .LoggedIn}}<a class="alt" href="/app">Go to your account →</a>
         {{else}}<a class="alt" href="/register">Create a free account →</a>{{end}}
@@ -29,8 +29,9 @@
         <h2>Pro</h2>
         <p class="price">{{.ProPrice}}</p>
         <ul>
-          <li>Files up to {{.ProMaxMB}} MB</li>
-          <li>{{.ProRetDays}}-day retention</li>
+          <li>Files up to {{.ProMax}} per transfer</li>
+          <li>Kept up to {{.ProRet}} (deleted on download)</li>
+          <li>Full API (send + decrypt keys)</li>
           <li>Everything in Free</li>
         </ul>
         {{if .IsPro}}

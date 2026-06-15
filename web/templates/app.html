@@ -20,11 +20,11 @@
   <main>
     <div class="card">
       <h2>Send a file</h2>
-      <p class="sub">Plan: <strong>{{.Plan}}</strong> — files up to {{.MaxMB}} MB, {{.RetentionH}}h retention.{{if ne .Plan "Pro"}} <a href="/pricing">Upgrade →</a>{{end}}</p>
+      <p class="sub">Plan: <strong>{{.Plan}}</strong> — files up to {{.MaxSize}}, kept up to {{.Retention}} if unopened. Files are deleted the moment the recipient downloads them.{{if ne .Plan "Pro"}} <a href="/pricing">Upgrade →</a>{{end}}</p>
       <form id="sendf">
         <label for="recipient">Recipient username</label>
         <input id="recipient" name="recipient" required placeholder="who it's for">
-        <label for="file">File (max {{.MaxMB}} MB)</label>
+        <label for="file">File (max {{.MaxSize}})</label>
         <input id="file" name="file" type="file" required>
         <button class="primary" type="submit">Encrypt &amp; send</button>
       </form>
@@ -33,6 +33,7 @@
 
     <div class="card">
       <h2>Inbox</h2>
+      <p class="sub">Downloads are one-time: each file is permanently deleted from the server once you download it.</p>
       {{if .Inbox}}
       <table>
         <tr><th>From</th><th>Size</th><th>Received</th><th></th><th></th></tr>

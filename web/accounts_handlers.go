@@ -143,7 +143,14 @@ func (s *server) writeDecrypted(w http.ResponseWriter, dk *mlkem.DecapsulationKe
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	closed := false
+	closeBlob := func() {
+		if !closed {
+			f.Close()
+			closed = true
+		}
+	}
+	defer closeBlob()
 
 	var filename string
 	var body io.Reader
@@ -171,9 +178,16 @@ func (s *server) writeDecrypted(w http.ResponseWriter, dk *mlkem.DecapsulationKe
 	}
 
 	setDownloadHeaders(w, filename)
-	if _, err := io.Copy(w, body); err != nil {
-		log.Printf("web: stream message %s: %v", id, err)
+	_, copyErr := io.Copy(w, body)
+	closeBlob() // release the file handle before deleting (Windows can't unlink an open file)
+	if copyErr != nil {
+		// Partial delivery — keep the message so the recipient can retry.
+		log.Printf("web: stream message %s: %v", id, copyErr)
+		return nil
 	}
+	// Burn-after-download: a successfully delivered file is deleted immediately,
+	// so it exists on the server only until the recipient retrieves it once.
+	s.msgs.delete(username, id)
 	return nil
 }
 
@@ -349,6 +363,8 @@ type inboxRow struct {
 
 func humanSize(n int64) string {
 	switch {
+	case n >= 1<<30:
+		return fmt.Sprintf("%g GB", float64(n)/(1<<30))
 	case n >= 1<<20:
 		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
 	case n >= 1<<10:
@@ -356,6 +372,22 @@ func humanSize(n int64) string {
 	default:
 		return fmt.Sprintf("%d B", n)
 	}
+}
+
+// planMaxLabel renders a plan's per-transfer size cap (e.g. "2 GB", "100 GB").
+func planMaxLabel(p Plan) string { return humanSize(p.MaxFileBytes) }
+
+// retentionLabel renders a retention period in days or hours, whichever reads
+// cleanly (e.g. "7 days", "30 days").
+func retentionLabel(d time.Duration) string {
+	if h := int(d.Hours()); h%24 == 0 && h >= 24 {
+		days := h / 24
+		if days == 1 {
+			return "1 day"
+		}
+		return fmt.Sprintf("%d days", days)
+	}
+	return fmt.Sprintf("%dh", int(d.Hours()))
 }
 
 // GET / — account-first landing: send logged-in users to the app, others to login.
@@ -420,8 +452,8 @@ func (s *server) handleApp(w http.ResponseWriter, r *http.Request) {
 		"Keys":         keyRows,
 		"Activity":     activity,
 		"Plan":         plan.Label,
-		"MaxMB":        plan.MaxFileBytes / (1 << 20),
-		"RetentionH":   int(plan.TTL.Hours()),
+		"MaxSize":      planMaxLabel(plan),
+		"Retention":    retentionLabel(plan.TTL),
 		"TOTPEnabled":  totp,
 		"RecoveryLeft": recoveryLeft,
 	})

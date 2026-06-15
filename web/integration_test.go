@@ -198,8 +198,28 @@ func TestIntegration_CSRF(t *testing.T) {
 	mustStatus(t, c.form(http.MethodPost, "/api/2fa/setup", ts.URL, csrf, nil), 200, "TC-SEC-09 correct token")
 }
 
-func TestIntegration_SendRoundtripAndPlanCap(t *testing.T) {
-	s, ts := newTestServer(t)
+func bobDecryptToken(t *testing.T, bob *tclient, base, csrf string) string {
+	t.Helper()
+	kr := bob.form(http.MethodPost, "/api/keys", base, csrf, url.Values{"label": {"cli"}, "scope": {"decrypt"}})
+	var key struct{ Token string }
+	decodeJSON(t, kr, &key)
+	return key.Token
+}
+
+func firstInboxID(t *testing.T, c *tclient, token string) string {
+	t.Helper()
+	var ib struct {
+		Messages []struct{ ID string } `json:"messages"`
+	}
+	decodeJSON(t, c.bearer(http.MethodGet, "/api/v1/inbox", token), &ib)
+	if len(ib.Messages) == 0 {
+		t.Fatal("inbox empty")
+	}
+	return ib.Messages[0].ID
+}
+
+func TestIntegration_SendRoundtripAndBurn(t *testing.T) {
+	_, ts := newTestServer(t)
 	alice := newClient(t, ts.URL)
 	acsrf := alice.registerLogin(ts.URL, "alice", goodPass)
 	bob := newClient(t, ts.URL)
@@ -209,32 +229,43 @@ func TestIntegration_SendRoundtripAndPlanCap(t *testing.T) {
 	mustStatus(t, alice.multipartSend(ts.URL, acsrf, "bob", "secret.txt", payload), 200, "TC-F-07 send")
 	mustStatus(t, alice.multipartSend(ts.URL, acsrf, "ghost", "x.txt", payload), 404, "TC-F-08 unknown recipient")
 
-	// TC-SEC-14: free plan cap (25 MiB).
-	mustStatus(t, alice.multipartSend(ts.URL, acsrf, "bob", "big.bin", make([]byte, 26<<20)), 413, "TC-SEC-14 plan cap")
+	tok := bobDecryptToken(t, bob, ts.URL, bcsrf)
+	id := firstInboxID(t, bob, tok)
 
-	// TC-F-12/10: bob creates a decrypt key and downloads — roundtrip must match.
-	kr := bob.form(http.MethodPost, "/api/keys", ts.URL, bcsrf, url.Values{"label": {"cli"}, "scope": {"decrypt"}})
-	var key struct{ Token string }
-	decodeJSON(t, kr, &key)
-	inbox := bob.bearer(http.MethodGet, "/api/v1/inbox", key.Token)
-	var ib struct {
-		Messages []struct{ ID string } `json:"messages"`
-	}
-	decodeJSON(t, inbox, &ib)
-	if len(ib.Messages) != 1 {
-		t.Fatalf("TC-F-09 inbox: got %d messages, want 1", len(ib.Messages))
-	}
-	id := ib.Messages[0].ID
-	dl := bob.bearer(http.MethodGet, "/api/v1/messages/"+id, key.Token)
-	got := readBody(dl)
+	got := readBody(bob.bearer(http.MethodGet, "/api/v1/messages/"+id, tok))
 	if !bytes.Equal(got, payload) {
 		t.Errorf("TC-F-10 roundtrip: got %q want %q", got, payload)
 	}
+	// Burn-after-download: a second fetch of the same id must be gone.
+	mustStatus(t, bob.bearer(http.MethodGet, "/api/v1/messages/"+id, tok), 404, "burn-after-download: second fetch")
+}
 
-	// TC-SEC-15: tamper the stored blob → download must fail.
-	blob := s.msgs.blobPath("bob", id)
-	corruptByte(t, blob, 40)
-	mustStatus(t, bob.bearer(http.MethodGet, "/api/v1/messages/"+id, key.Token), 404, "TC-SEC-15 tampered blob")
+func TestIntegration_PlanUploadCap(t *testing.T) {
+	saved := plans["free"] // shrink the free cap so we can test it without a 2 GiB upload
+	plans["free"] = Plan{Name: "free", Label: "Free", MaxFileBytes: 1 << 20, TTL: time.Hour}
+	defer func() { plans["free"] = saved }()
+
+	_, ts := newTestServer(t)
+	alice := newClient(t, ts.URL)
+	acsrf := alice.registerLogin(ts.URL, "alice", goodPass)
+	newClient(t, ts.URL).registerLogin(ts.URL, "bob", goodPass) // recipient must exist
+	mustStatus(t, alice.multipartSend(ts.URL, acsrf, "bob", "big.bin", make([]byte, 2<<20)), 413, "TC-SEC-14 plan cap")
+}
+
+func TestIntegration_BlobTamper(t *testing.T) {
+	s, ts := newTestServer(t)
+	alice := newClient(t, ts.URL)
+	acsrf := alice.registerLogin(ts.URL, "alice", goodPass)
+	bob := newClient(t, ts.URL)
+	bcsrf := bob.registerLogin(ts.URL, "bob", goodPass)
+
+	mustStatus(t, alice.multipartSend(ts.URL, acsrf, "bob", "secret.txt", []byte("top secret payload")), 200, "send")
+	tok := bobDecryptToken(t, bob, ts.URL, bcsrf)
+	id := firstInboxID(t, bob, tok)
+
+	// TC-SEC-15: tamper the stored blob BEFORE download → decryption must fail.
+	corruptByte(t, s.msgs.blobPath("bob", id), 40)
+	mustStatus(t, bob.bearer(http.MethodGet, "/api/v1/messages/"+id, tok), 404, "TC-SEC-15 tampered blob")
 }
 
 func TestIntegration_CredentialRevocationOnPasswordChange(t *testing.T) {
