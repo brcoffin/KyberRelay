@@ -20,16 +20,20 @@ import (
 type billingConfig struct {
 	secretKey     string
 	priceID       string
+	teamPriceID   string // per-seat Stripe price for Team (future seat billing)
 	webhookSecret string
-	proPrice      string // display only, e.g. "$5/mo"
+	proPrice      string // display only, e.g. "$9/mo"
+	teamPrice     string // display only, e.g. "$8/user/mo"
 }
 
 func loadBilling() *billingConfig {
 	return &billingConfig{
 		secretKey:     env("STRIPE_SECRET_KEY", ""),
 		priceID:       env("STRIPE_PRICE_ID", ""),
+		teamPriceID:   env("STRIPE_TEAM_PRICE_ID", ""),
 		webhookSecret: env("STRIPE_WEBHOOK_SECRET", ""),
-		proPrice:      env("PRO_PRICE", "$5/mo"),
+		proPrice:      env("PRO_PRICE", "$9/mo"),
+		teamPrice:     env("TEAM_PRICE", "$8/user/mo"),
 	}
 }
 

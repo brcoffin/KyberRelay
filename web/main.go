@@ -65,6 +65,7 @@ type server struct {
 	accounts   *accounts
 	msgs       *messages
 	apikeys    *apikeyStore
+	teams      *teamStore
 	sessions   *sessionStore
 	pending    *pendingStore
 	loginGuard *loginGuard
@@ -101,6 +102,10 @@ func newServer(cfg config) (*server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("apikeys dir: %w", err)
 	}
+	teams, err := newTeamStore(filepath.Join(cfg.dataDir, "teams"))
+	if err != nil {
+		return nil, fmt.Errorf("teams dir: %w", err)
+	}
 	tmpl, err := template.ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("templates: %w", err)
@@ -110,7 +115,7 @@ func newServer(cfg config) (*server, error) {
 		maxUploads = 1
 	}
 	return &server{
-		cfg: cfg, store: st, accounts: acct, msgs: msgs, apikeys: keys,
+		cfg: cfg, store: st, accounts: acct, msgs: msgs, apikeys: keys, teams: teams,
 		sessions:   newSessionStore(12 * time.Hour),
 		pending:    newPendingStore(5 * time.Minute),
 		loginGuard: newLoginGuard(5, 15*time.Minute),
@@ -156,6 +161,13 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("POST /api/keys", s.handleKeyCreate)
 	mux.HandleFunc("GET /api/keys", s.handleKeyList)
 	mux.HandleFunc("POST /api/keys/{id}/delete", s.handleKeyRevoke)
+
+	// Teams (session-authenticated)
+	mux.HandleFunc("GET /api/team", s.handleTeamGet)
+	mux.HandleFunc("POST /api/team/create", s.handleTeamCreate)
+	mux.HandleFunc("POST /api/team/invite", s.handleTeamInvite)
+	mux.HandleFunc("POST /api/team/remove", s.handleTeamRemove)
+	mux.HandleFunc("POST /api/team/leave", s.handleTeamLeave)
 
 	// Programmatic API (Bearer token auth)
 	mux.HandleFunc("POST /api/v1/send", s.apiSend)

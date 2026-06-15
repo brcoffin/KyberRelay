@@ -20,6 +20,7 @@ type Plan struct {
 var plans = map[string]Plan{
 	"free": {Name: "free", Label: "Free", MaxFileBytes: 2 << 30, TTL: 7 * 24 * time.Hour},
 	"pro":  {Name: "pro", Label: "Pro", MaxFileBytes: 100 << 30, TTL: 30 * 24 * time.Hour},
+	"team": {Name: "team", Label: "Team", MaxFileBytes: 250 << 30, TTL: 30 * 24 * time.Hour},
 }
 
 // planFor returns the plan for a name, defaulting to free for unknown/empty.

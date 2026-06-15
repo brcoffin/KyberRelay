@@ -28,14 +28,25 @@ func jsonError(w http.ResponseWriter, code int, msg string) {
 	http.Error(w, msg, code)
 }
 
+// planForUser resolves a user's effective plan: an active team membership grants
+// the Team plan; otherwise their personal plan (defaulting to free).
+func (s *server) planForUser(username string) Plan {
+	u, err := s.accounts.load(username)
+	if err != nil {
+		return planFor("free")
+	}
+	if u.TeamID != "" {
+		if _, err := s.teams.load(u.TeamID); err == nil {
+			return planFor("team")
+		}
+	}
+	return planFor(u.Plan)
+}
+
 // uploadLimit is the largest file the sender's plan permits, used to bound the
 // request body (and thus memory) before reading.
 func (s *server) uploadLimit(username string) int64 {
-	plan := planFor("free")
-	if u, err := s.accounts.load(username); err == nil {
-		plan = planFor(u.Plan)
-	}
-	return plan.MaxFileBytes
+	return s.planForUser(username).MaxFileBytes
 }
 
 // encryptAndStoreStream encapsulates to the recipient's public key and streams
@@ -44,10 +55,7 @@ func (s *server) uploadLimit(username string) int64 {
 // send handlers.
 func (s *server) encryptAndStoreStream(sender, recipient, filename string, src io.Reader) (string, error) {
 	// The sender's plan governs the size limit and retention.
-	plan := planFor("free")
-	if su, err := s.accounts.load(sender); err == nil {
-		plan = planFor(su.Plan)
-	}
+	plan := s.planForUser(sender)
 	ru, err := s.accounts.load(recipient)
 	if err != nil {
 		return "", errNoSuchUser
@@ -419,11 +427,10 @@ func (s *server) handleApp(w http.ResponseWriter, r *http.Request) {
 			When:   time.Unix(m.Created, 0).UTC().Format("2006-01-02 15:04 UTC"),
 		})
 	}
-	plan := planFor("free")
+	plan := s.planForUser(sess.username)
 	totp := false
 	recoveryLeft := 0
 	if u, err := s.accounts.load(sess.username); err == nil {
-		plan = planFor(u.Plan)
 		totp = u.TOTPEnabled
 		recoveryLeft = len(u.RecoveryCodes)
 	}

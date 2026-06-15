@@ -70,9 +70,10 @@ type User struct {
 	PubKey     []byte `json:"pub_key"` // ML-KEM-768 encapsulation key (1184 B)
 	SaltWrap   []byte `json:"salt_wrap"`
 	WrapNonce  []byte `json:"wrap_nonce"`
-	WrappedKey []byte `json:"wrapped_key"` // AES-GCM-wrapped 64-byte decapsulation seed
-	KDF        string `json:"kdf"`         // "argon2id" (new) or "pbkdf2"/"" (legacy)
-	Plan       string `json:"plan"`        // "" / "free" / "pro"
+	WrappedKey []byte `json:"wrapped_key"`       // AES-GCM-wrapped 64-byte decapsulation seed
+	KDF        string `json:"kdf"`               // "argon2id" (new) or "pbkdf2"/"" (legacy)
+	Plan       string `json:"plan"`              // "" / "free" / "pro"
+	TeamID     string `json:"team_id,omitempty"` // member of this team, if any (grants Team plan)
 	Created    int64  `json:"created"`
 
 	// TOTP 2FA. Secret is wrapped under totpKey(decapsulation key).
