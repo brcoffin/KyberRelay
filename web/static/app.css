@@ -56,7 +56,7 @@ p.sub { margin: 0 0 18px; color: var(--dim); font-size: 14px; }
 
 label { display: block; margin: 14px 0 6px; font-size: 13px; color: #33425e; }
 
-input[type=file], input[type=password], input[type=number], input[type=text], input:not([type]), select {
+input[type=file], input[type=password], input[type=number], input[type=text], input[type=email], input:not([type]), select, textarea {
   width: 100%;
   background: var(--bg-soft);
   border: 1px solid var(--border);
@@ -64,8 +64,10 @@ input[type=file], input[type=password], input[type=number], input[type=text], in
   border-radius: 9px;
   padding: 11px;
   font-size: 15px;
+  font-family: inherit;
 }
-input:focus, select:focus { outline: none; border-color: var(--accent); background: #fff; }
+textarea { resize: vertical; min-height: 110px; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); background: #fff; }
 
 button, button.primary {
   margin-top: 20px;
@@ -137,6 +139,9 @@ header .hdr-icon { height: 30px; width: 30px; }
 header .wordmark { font-weight: 700; letter-spacing: -.5px; color: var(--navy); }
 header .wordmark .c { color: var(--accent); }
 header .who { color: var(--dim); font-size: 14px; margin-left: 6px; }
+.hdr-nav { display: flex; align-items: center; gap: 16px; }
+.hdr-nav a { color: var(--dim); text-decoration: none; font-size: 14px; }
+.hdr-nav a:hover { color: var(--accent); }
 .logout {
   width: auto; margin: 0; background: #fff; border: 1px solid var(--border);
   color: #33425e; border-radius: 8px; padding: 7px 13px; font-size: 14px; font-weight: 500;

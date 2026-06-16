@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KyberCrypt — Contact</title>
+<link rel="icon" type="image/svg+xml" href="/static/kybercrypt-icon.svg">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div class="wrap">
+    <a href="/"><img class="brand-logo" src="/static/kybercrypt-horizontal.svg" alt="KyberCrypt"></a>
+    <div class="card">
+      <h1>Contact us</h1>
+      {{if .Sent}}
+        <div class="status ok">Thanks — your message was sent. We'll get back to you soon.</div>
+        <div class="alt"><a href="/">← Back to home</a></div>
+      {{else}}
+        <p class="sub">Support questions, billing, or Enterprise inquiries — send a note and we'll be in touch.</p>
+        <form method="post" action="/api/contact">
+          <input type="text" name="website" class="hidden" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <label for="name">Your name</label>
+          <input id="name" name="name" autocomplete="name" required>
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required>
+          <label for="topic">Topic</label>
+          <select id="topic" name="topic">
+            <option {{if eq .Topic "General"}}selected{{end}}>General</option>
+            <option {{if eq .Topic "Support"}}selected{{end}}>Support</option>
+            <option {{if eq .Topic "Billing"}}selected{{end}}>Billing</option>
+            <option {{if eq .Topic "Enterprise"}}selected{{end}}>Enterprise</option>
+          </select>
+          <label for="message">Message</label>
+          <textarea id="message" name="message" rows="5" required placeholder="How can we help?"></textarea>
+          <button class="primary" type="submit">Send message</button>
+        </form>
+        <div class="alt"><a href="/">← Back to home</a></div>
+      {{end}}
+    </div>
+  </div>
+</body>
+</html>

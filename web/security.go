@@ -68,9 +68,13 @@ func (s *server) csrfGuard(next http.Handler) http.Handler {
 				http.Error(w, "cross-origin request blocked", http.StatusForbidden)
 				return
 			}
-			if sess, ok := s.sessions.current(r); ok && !validCSRFToken(r, sess.csrf) {
-				http.Error(w, "invalid or missing CSRF token", http.StatusForbidden)
-				return
+			// The public contact form has no session token; it relies on the
+			// same-origin check above plus a honeypot + rate limit.
+			if r.URL.Path != "/api/contact" {
+				if sess, ok := s.sessions.current(r); ok && !validCSRFToken(r, sess.csrf) {
+					http.Error(w, "invalid or missing CSRF token", http.StatusForbidden)
+					return
+				}
 			}
 		}
 		next.ServeHTTP(w, r)

@@ -73,6 +73,7 @@ type server struct {
 	uploadSem  chan struct{}
 	billing    *billingConfig
 	audit      *auditor
+	contact    *contactStore
 	tmpl       *template.Template
 }
 
@@ -123,6 +124,7 @@ func newServer(cfg config) (*server, error) {
 		uploadSem:  make(chan struct{}, maxUploads),
 		billing:    loadBilling(),
 		audit:      newAuditor(cfg.dataDir),
+		contact:    newContactStore(cfg.dataDir),
 		tmpl:       tmpl,
 	}, nil
 }
@@ -176,6 +178,9 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/messages/{id}", s.apiMsgDelete)
 
 	// Billing (Stripe)
+	mux.HandleFunc("GET /contact", s.handleContactPage)
+	mux.HandleFunc("POST /api/contact", s.handleContactSubmit)
+
 	mux.HandleFunc("GET /pricing", s.handlePricing)
 	mux.HandleFunc("POST /api/billing/checkout", s.handleCheckout)
 	mux.HandleFunc("POST /api/billing/webhook", s.handleWebhook)

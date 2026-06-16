@@ -15,7 +15,10 @@
       <span class="wordmark">Kyber<span class="c">Crypt</span></span>
       <span class="who">{{.User}}</span>
     </a>
-    <form method="post" action="/api/logout"><input type="hidden" name="csrf_token" value="{{.CSRF}}"><button class="logout" type="submit">Log out</button></form>
+    <nav class="hdr-nav">
+      <a href="/contact?topic=Support">Support</a>
+      <form method="post" action="/api/logout"><input type="hidden" name="csrf_token" value="{{.CSRF}}"><button class="logout" type="submit">Log out</button></form>
+    </nav>
   </header>
   <main>
     <div class="card">
