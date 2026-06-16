@@ -398,7 +398,7 @@ func retentionLabel(d time.Duration) string {
 	return fmt.Sprintf("%dh", int(d.Hours()))
 }
 
-// GET / — account-first landing: send logged-in users to the app, others to login.
+// GET / — logged-in users go to the app; everyone else gets the landing page.
 func (s *server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -408,7 +408,7 @@ func (s *server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/app", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	s.render(w, "landing.html", nil)
 }
 
 // GET /app — dashboard (send form + inbox). Requires login.

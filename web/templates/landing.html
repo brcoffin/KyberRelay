@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KyberCrypt — Post-quantum encrypted file transfer</title>
+<meta name="description" content="Send files encrypted with post-quantum cryptography (ML-KEM + AES-256-GCM), sealed to the recipient and deleted after download.">
+<link rel="icon" type="image/svg+xml" href="/static/kybercrypt-icon.svg">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="landing-nav">
+    <a class="brand" href="/">
+      <img class="hdr-icon" src="/static/kybercrypt-icon.svg" alt="">
+      <span class="wordmark">Kyber<span class="c">Crypt</span></span>
+    </a>
+    <nav class="landing-links">
+      <a href="/pricing">Pricing</a>
+      <a href="/login">Log in</a>
+      <a class="btn-sm" href="/register">Create account</a>
+    </nav>
+  </header>
+
+  <main class="landing">
+    <section class="hero">
+      <h1>Encrypted file transfer, built for the post-quantum era.</h1>
+      <p class="lead">
+        KyberCrypt seals every file to the recipient with <strong>post-quantum cryptography</strong>
+        (ML-KEM-768&nbsp;+&nbsp;AES-256-GCM). The server stores <strong>only ciphertext</strong>, and each
+        file is <strong>permanently deleted the moment it's downloaded</strong>.
+      </p>
+      <div class="cta">
+        <a class="btn-primary" href="/register">Create your free account →</a>
+        <a class="btn-ghost" href="/login">Log in</a>
+      </div>
+    </section>
+
+    <section class="how">
+      <h2>How it works</h2>
+      <img class="workflow" src="/static/kybercrypt-workflow.png"
+           alt="KyberCrypt workflow: 1) sender uploads a file addressed to a username; 2) it's encrypted with ML-KEM + AES-256-GCM, sealed to the recipient's public key; 3) the server stores ciphertext only and can't read it; 4) the recipient authenticates with 2FA and decrypts; 5) the file is deleted after download.">
+    </section>
+
+    <section class="features">
+      <div class="feature">
+        <h3>Post-quantum by default</h3>
+        <p>ML-KEM-768 key encapsulation with AES-256-GCM — protection against tomorrow's quantum attacks, on every transfer.</p>
+      </div>
+      <div class="feature">
+        <h3>Sealed to the recipient</h3>
+        <p>Files are encrypted to the recipient's public key. The server keeps only ciphertext — at rest, your data isn't readable.</p>
+      </div>
+      <div class="feature">
+        <h3>Burn after download</h3>
+        <p>Each file is deleted the instant the recipient downloads it. Nothing lingers on the server.</p>
+      </div>
+      <div class="feature">
+        <h3>Accounts, 2FA &amp; an API</h3>
+        <p>Send by username, lock your account with TOTP two-factor, and automate transfers with scoped API keys.</p>
+      </div>
+    </section>
+
+    <section class="cta-bottom">
+      <h2>Ready to send something private?</h2>
+      <a class="btn-primary" href="/register">Create an account</a>
+      <p class="muted">Free plan includes 2&nbsp;GB transfers — <a href="/pricing">see plans</a>.</p>
+    </section>
+  </main>
+
+  <footer class="landing-foot">
+    <span>© KyberCrypt — post-quantum encrypted file transfer</span>
+    <a href="/pricing">Pricing</a>
+  </footer>
+</body>
+</html>
